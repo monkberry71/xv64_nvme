@@ -3,6 +3,23 @@
 #include <kernel/string.h>
 #include <kernel/debug.h>
 
+void* memset(void* dst, int c, uint64_t n) {
+    char *p = dst;
+    for(int i=0; i<n; i++) {
+        p[i] = c;
+    }
+    return dst;
+}
+
+void* memcpy(void* dst, void* src, uint64_t n) {
+    char *d = dst;
+    char *s = src;
+    for(int i=0; i<n; i++) {
+        d[i] = s[i];
+    }
+    return dst;
+}
+
 static char digits[] = "0123456789ABCDEF";
 static void print_int(putc_t putc, int64_t xx, int base, int sign) {
     char buf[16];

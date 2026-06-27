@@ -5,19 +5,16 @@
 #include <kernel/string.h>
 #include <kernel/mmu.h>
 #include <kernel/mb2.h>
+#include <kernel/cpu.h>
 
 // We set edi as a mb2_info_phys in the entry code before jumping to main
 int main(uint32_t mb2_info_phys) {
     serial_init();
     bump_init();
     preserve_mb2((void*)mb2_info_phys);
+    bsp_core_init();
+    bsp_seg_init();
     
-    // mb2 iterating test
-    extern struct mb2_info *reserved_mb2_info;
-    struct mb2_it test_it;
-    mb2_it_init(&test_it, reserved_mb2_info);
-    for(; !test_it.end; mb2_it_next(&test_it)) {
-        serial_printf("mb2 tag : %d\n", test_it.curr->type);
-    }
+    serial_printf("%p", mycpu());
     for(;;);
 }

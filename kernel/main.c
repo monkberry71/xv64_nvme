@@ -4,22 +4,20 @@
 #include <kernel/bump.h>
 #include <kernel/string.h>
 #include <kernel/mmu.h>
+#include <kernel/mb2.h>
 
-int main(void) {
-    uint32_t *test_writing_ptr = (void*)(KERN_BASE + 8);
-    *test_writing_ptr = 0xDEADBEEF;
-
+// We set edi as a mb2_info_phys in the entry code before jumping to main
+int main(uint32_t mb2_info_phys) {
     serial_init();
-    serial_printf("Hello %s, %d %d %d %p\n", "Someone", 1,2,3, test_writing_ptr);
-
     bump_init();
-    char *bump_test_p = bump_alloc();
-    char *next_bump = bump_alloc();
-    // memset(bump_test_p, 0, PGSIZE_4KB);
-
-    memcpy(bump_test_p, "BUMP TEST!", 11);
-    serial_printf("%s %d", bump_test_p, next_bump - bump_test_p);
+    preserve_mb2((void*)mb2_info_phys);
     
-
+    // mb2 iterating test
+    extern struct mb2_info *reserved_mb2_info;
+    struct mb2_it test_it;
+    mb2_it_init(&test_it, reserved_mb2_info);
+    for(; !test_it.end; mb2_it_next(&test_it)) {
+        serial_printf("mb2 tag : %d\n", test_it.curr->type);
+    }
     for(;;);
 }

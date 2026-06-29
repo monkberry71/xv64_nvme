@@ -52,8 +52,8 @@ static int insert_direct_map(pte_t *pml4) {
     pte_t *pdpt = bump_alloc();
     pml4[PML4_IDX(DIRECT_BASE)] = V2P_KERN(pdpt) | DM_ENTRY_FLAGS;
 
-    // I think max ram 128G is enough... 
-    for(int i=0; i<128; i++) {
+    // I think max ram 128G is enough... PHY_STOP >> 30 is 128GB >> 30, 128GB / 1GB, 128
+    for(int i=0; i<(PHY_STOP >> 30); i++) {
         uint64_t phy_addr = i * PGSIZE_1GB;
         pte_t pdpt_entry = phy_addr | PTE_PS | DM_ENTRY_FLAGS; // enable PS bit, it is going to be 1GB mapping
         

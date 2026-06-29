@@ -3,8 +3,9 @@
 
 #define ENTRY_BASE 0x100000
 #define KERN_BASE 0xFFFFFFFF80000000ULL
-
 #define DIRECT_BASE 0xFFFF888000000000ULL
+#define PHY_STOP (1ULL << 37) // 128GB
+
 
 
 #define V2P_KERN(va) ((uint64_t)(va) - KERN_BASE)

@@ -7,34 +7,49 @@
 #include <kernel/mb2.h>
 #include <kernel/cpu.h>
 #include <kernel/kvm.h>
+#include <kernel/kalloc.h>
+#include <kernel/debug.h>
 
 // We set edi as a mb2_info_phys in the entry code before jumping to main
 int main(uint32_t mb2_info_phys) {
     serial_init();
     bump_init();
-    preserve_mb2((void*)mb2_info_phys);
+    preserve_mb2((void*)(uint64_t)mb2_info_phys);
 
     bsp_core_init();
     bsp_seg_init();
 
-    // Direct mapping and test
     kvm_alloc();
+    kalloc_init();
 
-    // Test:
-    // If the direct mapping works, we would see it by the kernel mapping too
+    // Test: kalloc
+    uint32_t *test = kalloc();
+    memcpy(test, "DEADBEEF\n", 10);
+    serial_printf("%s", test);
 
-    // Write as the kernel mapping, Read from the direct mapping
-    char *test_p = bump_alloc();
-    memcpy(test_p, "WRITTEN FROM KERNEL MAPPED ADDR", 32);
+    char* p1 = kalloc();
+    char* p2 = kalloc();
+    if(p1 == p2) {
+        panic("kalloc test: kalloc failed");
+    }
 
-    uint64_t pa_of_test_p = V2P_KERN(test_p);
-    void* direct_mapped_test_p = P2V_DIR(pa_of_test_p);
+    memset(p1, 0xAA, PGSIZE_4KB);
+    if(*p1 != *(p1+PGSIZE_4KB-1)) {
+        panic("kalloc test: page filling failed");
+    }
+    memset(p2, 0xBB, PGSIZE_4KB);
+    if(*p2 != *(p2+PGSIZE_4KB-1)) {
+        panic("kalloc test: page filling failed");
+    }
+    kfree(p1);
+    void* p3 = kalloc();
+    if(p1 != p3) {
+        panic("kalloc test: kfree failed");
+    }
 
-    serial_printf("%s\n", direct_mapped_test_p);
-
-    // Write as the kernel mapping, Read from the kernel mapping
-    memcpy(direct_mapped_test_p, "WRITTEN FROM DIRECT MAPPED ADDR", 32);
-    serial_printf("%s", test_p);
+    int count = 0;
+    while(kalloc()) count++;
+    serial_printf("%d", count);
 
     for(;;);
 }

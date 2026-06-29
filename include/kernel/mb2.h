@@ -62,5 +62,5 @@ struct mb2_it {
 };
 
 void preserve_mb2(void* mb2_info_phys);
-void mb2_it_init(struct mb2_it *it, struct mb2_info *base);
+void mb2_it_init(struct mb2_it *it, const struct mb2_info *base);
 void mb2_it_next(struct mb2_it *it);

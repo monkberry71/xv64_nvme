@@ -20,8 +20,8 @@ void preserve_mb2(void* mb2_info_phys) {
 }
 
 // mb2 iterator for iterating tags
-void mb2_it_init(struct mb2_it *it, struct mb2_info *base) {
-    it->curr = base->tags;
+void mb2_it_init(struct mb2_it *it, const struct mb2_info *info) {
+    it->curr = (void*)info->tags; // (void*) casting for const evade
     it->end = 0;
 }
 

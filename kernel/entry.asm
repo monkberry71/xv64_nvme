@@ -27,8 +27,10 @@ use32
     ; Let's ready for 64bit jump first
 
     ; Enable PAE, which makes 64bit addr space possible
+    ; Enable PGE too, which enables global page, if PTE_G of pte is set, it will not be flushed from TLB when cr3 is changed
     mov eax, cr4
     or eax, 1 shl 5; 5th bit is PAE;
+    or eax, 1 shl 7; 
     mov cr4, eax
 
     ; cr3 holds the physical addr of pml4 addr

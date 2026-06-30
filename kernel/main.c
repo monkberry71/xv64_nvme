@@ -9,6 +9,7 @@
 #include <kernel/kvm.h>
 #include <kernel/kalloc.h>
 #include <kernel/debug.h>
+#include <kernel/gop.h>
 
 // We set edi as a mb2_info_phys in the entry code before jumping to main
 int main(uint32_t mb2_info_phys) {
@@ -21,35 +22,10 @@ int main(uint32_t mb2_info_phys) {
 
     kvm_alloc();
     kalloc_init();
+    io_init();
 
-    // Test: kalloc
-    uint32_t *test = kalloc();
-    memcpy(test, "DEADBEEF\n", 10);
-    serial_printf("%s", test);
-
-    char* p1 = kalloc();
-    char* p2 = kalloc();
-    if(p1 == p2) {
-        panic("kalloc test: kalloc failed");
-    }
-
-    memset(p1, 0xAA, PGSIZE_4KB);
-    if(*p1 != *(p1+PGSIZE_4KB-1)) {
-        panic("kalloc test: page filling failed");
-    }
-    memset(p2, 0xBB, PGSIZE_4KB);
-    if(*p2 != *(p2+PGSIZE_4KB-1)) {
-        panic("kalloc test: page filling failed");
-    }
-    kfree(p1);
-    void* p3 = kalloc();
-    if(p1 != p3) {
-        panic("kalloc test: kfree failed");
-    }
-
-    int count = 0;
-    while(kalloc()) count++;
-    serial_printf("%d", count);
+    gop_init();
+    gop_draw_rect(100, 100, 100, 100, GOP_BLU);
 
     for(;;);
 }

@@ -14,7 +14,7 @@ typedef uint64_t pte_t;
 #define PDPT_IDX(va) (((uint64_t)(va) >> 30) & 0x1FF)
 #define PD_IDX(va) (((uint64_t)(va) >> 21) & 0x1FF)
 #define PT_IDX(va) (((uint64_t)(va) >> 12) & 0x1FF)
-#define PAGE_OFFSET(va) ((uint64_t)(va) & ~(PGSIZE_4KB - 1))
+#define PAGE_OFFSET(va) ((uint64_t)(va) & (PGSIZE_4KB - 1))
 
 #define PTE_ADDR(pte) ((pte) & ~(PGSIZE_4KB - 1))
 #define PTE_FLAGS(pte) ((pte) & (PGSIZE_4KB - 1))

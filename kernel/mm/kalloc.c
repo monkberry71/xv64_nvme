@@ -58,10 +58,11 @@ void free_range(void* dm_start, void* dm_end) {
     }
 }
 
-extern const struct mb2_info *reserved_mb2_info;
 void kalloc_init(void) {
     kmem.free_list = 0;
     init_lock(&kmem.lk, "kmem");
+    
+    extern const struct mb2_info *reserved_mb2_info;
     struct mb2_it it;
     mb2_it_init(&it, reserved_mb2_info);
 

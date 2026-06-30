@@ -5,6 +5,8 @@
 #include <kernel/mem_layout.h>
 #include <kernel/x86_64.h>
 #include <kernel/debug.h>
+#include <kernel/spin_lock.h>
+#include <kernel/paging.h>
 
 // We can divide the whole Virtual addr space into 2 equal pieces, user vs kernel
 // so the pml4 of any process will have 0~255 entry as user space, and 256~511 as kernel space
@@ -81,4 +83,38 @@ static int insert_kernel_map(pte_t *pml4) {
         pdpt[PDPT_IDX(KERN_BASE) + i] = pdpt_entry;
     }
     return 0;
+}
+
+// make a mappage for mmio
+
+static struct {
+    struct spin_lock lk;
+    uint64_t bump_line;
+} io_remap_alloc;
+
+void io_init(void) {
+    init_lock(&io_remap_alloc.lk, "io_alloc_lk");
+    io_remap_alloc.bump_line = IO_REMAP_BASE;
+}
+
+// Make a mapping for mmio, with a size
+void* io_remap(uint64_t pa, uint64_t size) {
+
+    if(size == 0) return 0;
+    uint64_t pa_offset = PAGE_OFFSET(pa);
+
+    acquire(&io_remap_alloc.lk);
+    uint64_t va = io_remap_alloc.bump_line + pa_offset;
+    map_pages(
+        kpml4,
+        (void*) va,
+        size,
+        ROUND_DOWN(pa, PGSIZE_4KB),
+        PTE_W | PTE_G | PTE_PCD | PTE_PWT
+    );
+    
+    io_remap_alloc.bump_line = ROUND_UP(va + size, PGSIZE_4KB);
+    release(&io_remap_alloc.lk);
+
+    return (void*) va;
 }

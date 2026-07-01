@@ -10,7 +10,7 @@ struct cpu {
     // uint64_t lapic_id;
     // struct context* scheduler
     segment_desc_t gdt[N_SEGS];
-    // struct task_state ts;
+    struct task_state_segment tss;
     int cli_n;
     uint64_t was_intr_enabled;
     // struct proc *proc

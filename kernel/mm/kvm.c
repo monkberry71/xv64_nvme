@@ -89,7 +89,7 @@ static int insert_kernel_map(pte_t *pml4) {
 
 static struct {
     struct spin_lock lk;
-    uint64_t bump_line;
+    uint64_t bump_line; // always 4kb aligned
 } io_remap_alloc;
 
 void io_init(void) {

@@ -1,12 +1,9 @@
 #pragma once
+#include <kernel/helper.h>
 
 #define PGSIZE_4KB 4096
 #define PGSIZE_2MB (2 * 1024 * 1024) 
 #define PGSIZE_1GB (1ULL * 1024 * 1024 * 1024)
-
-// these `size` need to be always power of 2
-#define ROUND_UP(addr, size) (((uint64_t)(addr) + (uint64_t)(size) - 1) & ~((uint64_t)(size) - 1))
-#define ROUND_DOWN(addr, size) ((uint64_t)(addr) & ~((uint64_t)(size) - 1))
 
 typedef uint64_t pte_t;
 
@@ -18,8 +15,6 @@ typedef uint64_t pte_t;
 
 #define PTE_ADDR(pte) ((pte) & ~(PGSIZE_4KB - 1))
 #define PTE_FLAGS(pte) ((pte) & (PGSIZE_4KB - 1))
-
-#define BIT(n) (1ULL << (n))
 
 #define PTE_P BIT(0) // present
 #define PTE_W BIT(1) // write enable

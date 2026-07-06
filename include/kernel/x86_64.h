@@ -1,6 +1,7 @@
 #pragma once
 #include <stdint.h>
 #include <kernel/seg.h>
+#include <kernel/intr.h>
 
 static inline void outb(uint16_t port, uint8_t val) {
     __asm__ volatile ("outb %0, %1" : : "a"(val), "Nd"(port));
@@ -40,6 +41,7 @@ static inline void lgdt(segment_desc_t gdt[], uint64_t size) {
 // MSRs
 #define MSR_GS_BASE 0xC0000101 // gs base of this cpu
 #define MSR_KERNEL_GS_BASE 0xC0000102 // gs base reserved for kernel mode
+#define MSR_APIC_BASE 0x1B
 static inline uint64_t rdmsr(uint32_t msr) {
     uint32_t low, high;
     __asm__ volatile("rdmsr" : "=a"(low), "=d"(high) : "c"(msr));
@@ -61,7 +63,44 @@ static inline void lcr3(uint64_t val) {
     __asm__ volatile("movq %0,%%cr3" : : "r" (val));
 }
 
-static inline ltr(uint16_t selector) {
+static inline void ltr(uint16_t selector) {
     __asm__ volatile("ltr %0" : : "r"(selector));
 }
 
+static inline void lidt(struct gate_desc idt[], uint64_t size) {
+    volatile struct {
+        uint16_t limit;
+        uint64_t base;
+    } __attribute__((packed)) idtr = {size-1, (uint64_t) idt};
+    __asm__ volatile("lidt %0" : : "m"(idtr));
+}
+
+struct gprs_frame {
+    uint64_t r15;
+    uint64_t r14;
+    uint64_t r13;
+    uint64_t r12;
+    uint64_t r11;
+    uint64_t r10;
+    uint64_t r9;
+    uint64_t r8;
+    uint64_t rbp;
+    uint64_t rdi;
+    uint64_t rsi;
+    uint64_t rdx;
+    uint64_t rcx;
+    uint64_t rbx;
+    uint64_t rax;
+};
+
+struct trap_frame {
+    struct gprs_frame gprs;
+    uint64_t vector_no;
+    uint64_t err;
+
+    uint64_t rip;
+    uint64_t cs;
+    uint64_t rflags;
+    uint64_t rsp;
+    uint64_t ss;
+};

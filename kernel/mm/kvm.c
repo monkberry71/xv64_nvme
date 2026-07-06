@@ -105,13 +105,18 @@ void* io_remap(uint64_t pa, uint64_t size) {
 
     acquire(&io_remap_alloc.lk);
     uint64_t va = io_remap_alloc.bump_line + pa_offset;
-    map_pages(
+
+    int res = map_pages(
         kpml4,
         (void*) va,
         size,
         ROUND_DOWN(pa, PGSIZE_4KB),
         PTE_W | PTE_G | PTE_PCD | PTE_PWT
     );
+    if(res) {
+        release(&io_remap_alloc.lk);
+        panic("io_remap: map_pages failed");
+    }
     
     io_remap_alloc.bump_line = ROUND_UP(va + size, PGSIZE_4KB);
     release(&io_remap_alloc.lk);

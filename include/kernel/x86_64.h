@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <kernel/seg.h>
 #include <kernel/intr.h>
+#include <kernel/helper.h>
 
 static inline void outb(uint16_t port, uint8_t val) {
     __asm__ volatile ("outb %0, %1" : : "a"(val), "Nd"(port));
@@ -42,6 +43,15 @@ static inline void lgdt(segment_desc_t gdt[], uint64_t size) {
 #define MSR_GS_BASE 0xC0000101 // gs base of this cpu
 #define MSR_KERNEL_GS_BASE 0xC0000102 // gs base reserved for kernel mode
 #define MSR_APIC_BASE 0x1B
+
+#define MSR_EFER 0xC0000080 // we ve seen this at entry.asm, when enabling long mode
+#define EFER_SCE BIT(0) // system call enable
+#define EFER_LME BIT(8) // long mode enable
+
+#define MSR_STAR 0xC0000081 // segment selector
+#define MSR_LSTAR 0xC0000082 // rip 
+#define MSR_FMASK 0xC0000084 // flag to mask
+
 static inline uint64_t rdmsr(uint32_t msr) {
     uint32_t low, high;
     __asm__ volatile("rdmsr" : "=a"(low), "=d"(high) : "c"(msr));

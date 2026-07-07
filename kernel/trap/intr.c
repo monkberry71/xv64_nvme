@@ -43,13 +43,13 @@ void idt_init(void) {
 }
 
 void intr(struct trap_frame *tf) {
-    if(tf->vector_no == T_DBLFLT) {
-        panic("intr: double fault");
-    }
     if(tf->vector_no == T_IRQ0 + IRQ_TIMER) {
         serial_printf("Timer\n");
         lapic_eoi();
         return;
     }
+
+    serial_printf("[INTR]: Unhandled %d\n", tf->vector_no);
+    panic("intr: unhandled");
 
 }

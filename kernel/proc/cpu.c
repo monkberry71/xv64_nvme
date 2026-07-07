@@ -3,6 +3,7 @@
 #include <kernel/defs.h>
 #include <kernel/bump.h>
 #include <kernel/mmu.h>
+#include <kernel/debug.h>
 
 struct cpu cpus[MAX_N_CPUS] = {0};
 
@@ -11,7 +12,7 @@ void bsp_core_init(void) {
     bsp_core->self = bsp_core;
     
     // just for testing syscall, delete it later
-    bsp_core->kernel_stack = (uint64_t) bump_alloc() + PGSIZE_4KB; 
+    bsp_core->kstack_temp = (uint64_t) bump_alloc() + PGSIZE_4KB; 
 
     log_inits("bsp_core_init");
 }

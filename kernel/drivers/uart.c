@@ -2,6 +2,7 @@
 #include <kernel/uart.h>
 #include <kernel/x86_64.h>
 #include <kernel/string.h>
+#include <kernel/debug.h>
 
 // https://wiki.osdev.org/Serial_Ports
 
@@ -26,6 +27,8 @@ int serial_init() {
     // If serial is not faulty set it in normal operation mode
     // (not-loopback with IRQs enabled and OUT#1 and OUT#2 bits enabled)
     outb(PORT + 4, 0x0F);
+
+    log_inits("serial_init");
     return 0;
 }
 

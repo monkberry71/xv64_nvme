@@ -3,6 +3,7 @@
 #include <kernel/mb2.h>
 #include <kernel/kvm.h>
 #include <kernel/helper.h>
+#include <kernel/debug.h>
 
 struct {
     void* fb_base;
@@ -31,8 +32,9 @@ int gop_init(void) {
 
         // pitch is row byte size;
         uint64_t buf_size = fb_tag->pitch * fb_tag->height;
-        gop_fb.fb_base = io_remap((void*)fb_tag->addr, buf_size);
+        gop_fb.fb_base = io_remap(fb_tag->addr, buf_size);
 
+        log_inits("gop_init");
         return 0;
     }
     panic("gop_init: no gop found");

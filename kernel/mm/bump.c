@@ -28,6 +28,7 @@ int bump_init(void) {
 
     // the end is aleady aligned, don't worry about it
     boot_bump_mem.bump_line = (uint64_t) _kernel_phys_end;
+    log_inits("bump_init");
     return 0;
 }
 

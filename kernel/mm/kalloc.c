@@ -7,6 +7,7 @@
 #include <kernel/string.h>
 #include <kernel/spin_lock.h>
 #include <kernel/uart.h>
+#include <kernel/debug.h>
 
 // The free list, think of it as a whole page, on which `struct run *next` written 
 struct run {
@@ -86,6 +87,7 @@ void kalloc_init(void) {
         }
     }
     bump_disable(); // We made kalloc, no need to use the bump anymore.
+    log_inits("kalloc_init");
 }
 
 void* kalloc(void) {

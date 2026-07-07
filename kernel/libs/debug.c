@@ -1,10 +1,11 @@
 #include <stdint.h>
+#include <kernel/debug.h>
 #include <kernel/uart.h>
 #include <kernel/x86_64.h>
 #include <kernel/cpu.h>
 
 // Note: mycpu calls panic, so panic should not call mycpu in any way possible
-void panic(char* str) {
+void panic(char *str) {
     cli();
     // See the note above
     struct cpu *c;
@@ -15,4 +16,10 @@ void panic(char* str) {
     for(;;) {
         __asm__ volatile("hlt");
     }
+}
+
+// Log init functions
+void log_inits(char *str) {
+    serial_printf("[INIT]: %s\n", str);
+    return;
 }

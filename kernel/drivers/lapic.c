@@ -107,4 +107,5 @@ void lapic_per_core_init(void) {
 void bsp_lapic_init(void) {
     lapic_mapping_init();
     lapic_per_core_init();
+    log_inits("bsp_lapic_init");
 }

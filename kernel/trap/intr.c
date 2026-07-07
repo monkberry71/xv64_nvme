@@ -33,11 +33,13 @@ void tv_init(void) {
         init_gate_desc(&idt[i], 0, 0, SEG_KCODE << 3, vectors[i], 0);
     }
     init_gate_desc(&idt[T_DBLFLT], 0, 1, SEG_KCODE << 3, vectors[T_DBLFLT], 0);
+    log_inits("tv_init");
 }
 
 // set idtr to the table we made. All cores should execute it
 void idt_init(void) {
     lidt(idt, sizeof(idt));
+    log_inits("idt_init");
 }
 
 void intr(struct trap_frame *tf) {

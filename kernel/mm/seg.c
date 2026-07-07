@@ -85,4 +85,5 @@ void bsp_seg_init(void) {
     );
 
     ltr(SEG_TSS << 3);
+    log_inits("bsp_seg_init");
 }

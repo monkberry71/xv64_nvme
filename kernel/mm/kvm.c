@@ -7,7 +7,7 @@
 #include <kernel/debug.h>
 #include <kernel/spin_lock.h>
 #include <kernel/paging.h>
-
+#include <kernel/debug.h>
 // We can divide the whole Virtual addr space into 2 equal pieces, user vs kernel
 // so the pml4 of any process will have 0~255 entry as user space, and 256~511 as kernel space
 // this functions manages the higher half kernel space
@@ -95,6 +95,7 @@ static struct {
 void io_init(void) {
     init_lock(&io_remap_alloc.lk, "io_alloc_lk");
     io_remap_alloc.bump_line = IO_REMAP_BASE;
+    log_inits("io_init");
 }
 
 // Make a mapping for mmio, with a size

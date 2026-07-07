@@ -8,8 +8,8 @@
 
 struct cpu {
     struct cpu* self;
-    // uint64_t user_rsp;
-    // uint64_t kernel_stack;
+    uint64_t user_rsp;
+    uint64_t kernel_stack;
     uint64_t lapic_id; // used for mycpu in the original xv6, we don't need it actually but just in case
     // struct context* scheduler
     segment_desc_t gdt[N_SEGS];

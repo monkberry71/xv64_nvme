@@ -17,7 +17,7 @@
 
 // static pte_t kpml4[512];
 // This pml4 is for scheduler process or general kthreads
-static pte_t *kpml4 = 0;
+pte_t *kpml4 = 0;
 
 // Alloc the whole pml4 and set cr3 as the pml4
 void kvm_alloc(void) {

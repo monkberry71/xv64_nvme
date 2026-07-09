@@ -65,7 +65,7 @@ void bsp_seg_init(void) {
     lgdt(c->gdt, sizeof(c->gdt));
 
     wrmsr(MSR_GS_BASE, (uint64_t) c); // real gs base
-    wrmsr(MSR_KERNEL_GS_BASE, (uint64_t)c); // CPU doesnt actually use this as gs base, it is mere storing only, but swapgs command will swap this and real gs_base regi
+    wrmsr(MSR_KERNEL_GS_BASE, 0); // CPU doesnt actually use this as gs base, it is mere storing only, but swapgs command will swap this and real gs_base regi
 
     tss_init(c);
 

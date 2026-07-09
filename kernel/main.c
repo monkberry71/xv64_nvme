@@ -14,6 +14,7 @@
 #include <kernel/lapic.h>
 #include <kernel/x86_64.h>
 #include <kernel/syscall.h>
+#include <kernel/proc.h>
 
 // We set edi as a mb2_info_phys in the entry code before jumping to main
 int main(uint32_t mb2_info_phys) {
@@ -35,7 +36,6 @@ int main(uint32_t mb2_info_phys) {
     bsp_lapic_init();
 
     syscall_init();
-    test_syscall();
-
+    test_swtch();
     for(;;);
 }

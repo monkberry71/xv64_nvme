@@ -56,6 +56,25 @@ uint64_t holding(struct spin_lock *lk) {
     return r;
 }
 
+// void acquire(struct spin_lock *lk) {
+//     serial_printf("acq enter cli_n=%d\n", mycpu()->cli_n);
+
+//     push_cli();
+//     serial_printf("acq after push cli_n=%d\n", mycpu()->cli_n);
+
+//     if(holding(lk)) {
+//         panic("acquire: deadlock");
+//     }
+//     serial_printf("acq after holding cli_n=%d\n", mycpu()->cli_n);
+
+//     while(xchg(&lk->locked, 1) != 0);
+
+//     __sync_synchronize();
+
+//     lk->cpu = mycpu();
+//     serial_printf("acq end cli_n=%d locked=%d\n", mycpu()->cli_n, lk->locked);
+// }
+
 void acquire(struct spin_lock *lk) {
     // If a lock is used by an intr handler, then the lock must not be used with intr enabled.
     // A thread holds the lock >> intr occurs >> intr handler on the same core tries to acquire the lock >> deadlock

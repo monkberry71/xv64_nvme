@@ -14,3 +14,8 @@ struct spin_lock {
 void init_lock(struct spin_lock *lk, char *name);
 void acquire(struct spin_lock *lk);
 void release(struct spin_lock *lk);
+
+void push_cli(void);
+void pop_cli(void);
+
+uint64_t holding(struct spin_lock *lk);

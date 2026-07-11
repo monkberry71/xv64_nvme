@@ -15,16 +15,16 @@ struct cpu {
     // can reliably and temporarily save the user_rsp. It is just a scratch pad before pushing it on the kstack
     uint64_t user_rsp_temp;
     // Like tss.rsp[0], syscall needs to know where the kernel stack is.
-    // We can use tss.rsp[0], but for now let's use a separate field,
+    // We can use tss.rsp[0], but for now let's use a separate field while testing,
     // since intr references the tss.rsp[0] 
     uint64_t kstack_temp;
     uint64_t lapic_id; // used for mycpu in the original xv6, we don't need it actually but just in case
-    // struct context* scheduler
+    struct context* scheduler;
     segment_desc_t gdt[N_SEGS];
     struct task_state_segment tss; 
     int cli_n;
     uint64_t was_intr_enabled;
-    // struct proc *proc
+    struct proc *proc;
 };
 
 extern struct cpu cpus[MAX_N_CPUS];

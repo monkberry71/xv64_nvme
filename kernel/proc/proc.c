@@ -6,6 +6,8 @@
 #include <kernel/gop.h>
 #include <kernel/kalloc.h>
 #include <kernel/string.h>
+#include <kernel/mem_layout.h>
+#include <kernel/uart.h>
 
 struct {
     struct spin_lock lk;
@@ -45,6 +47,124 @@ struct proc* alloc_kthread(void) {
     return 0; // failed
 }
 
+struct proc* myproc(void) {
+    push_cli();
+
+    // In scheduler, proc is updated everytime
+    struct proc *p = mycpu()->proc;
+
+    pop_cli();
+    return p;
+}
+
+// Basically a wrapper for swtch, but..
+// 1. Check conditions before entering the scheduler
+// 2. push to stack the field that resides cpu struct but actually belongs to a proc
+void sched(void) {
+    struct proc *p = myproc();
+
+    // A process who wants to give up the cpu must:
+    // 1. acquire proc_table lock, scheduler works in only proc_table lock enabled
+    // 2. release any other lock it is holding
+    // 3. update its own state
+    // 4. Then, call sched
+
+    // 1. Acquire proc_table.lk
+    if(!holding(&proc_table.lk)) {
+        panic("sched: proc_table.lk not acquired");
+    }
+
+    // 2. Release any other lock its holding
+    // push_cli is called in only 3 places across the whole xv6
+    // #1 myproc #2 switch_uvm #3 spin_lock #3.1 holding
+    // #1 #2 #3.1 would not call yield-sched, thus cli_n == lock_n
+    if(mycpu()->cli_n != 1) {
+        panic("sched: sleep with lock acquired");
+    }
+
+    // 3. update its own state
+    if(p->state == RUNNING) {
+        panic("sched: state is not updated");
+    }
+
+    if(read_rflags() & RFLAGS_IF) {
+        // and since a proc_table lock is held, intr must be disabled
+        // just in case, check it
+        panic("sched: interrupt enabled");
+    }
+
+    // Interrupt nesting state logically belongs to the thread or process,
+    // proc->was_intr_enabled and proc->cli_n would be more appropriate
+    // However, the scheduler thread doesn't have a proc struct.
+    // so xv6 stores it in the cpu struct and swaps the value across sched()
+    // cli_n should be always 1 in this func, so save only the was_intr_enabled
+    // It is saved to the kernel stack because a local variable would be.
+    uint64_t was_intr_enabled = mycpu()->was_intr_enabled;
+    swtch(&p->context, mycpu()->scheduler);
+    mycpu()->was_intr_enabled = was_intr_enabled;
+}
+
+// Basically a wrapper of sched, which is a wrapper of swtch....
+// It actually do the work that sched checks
+void yield(void) {
+    acquire(&proc_table.lk);
+    myproc()->state = RUNNABLE;
+    sched();
+    release(&proc_table.lk);
+}
+
+// no return
+void scheduler(void) {
+    struct cpu *c = mycpu();
+    c->proc = 0; // proc equals to 0 means the scheduler
+
+    for(;;) {
+        // enable intr
+        // 1. Timer intr will be ignored in this scheduler thread, check intr().
+        // 2. If there is no RUNNABLE process, all sleeping,
+        //    intr would be disabled forever and no one will be awaken
+        //    Thus, enable intr for a small amount of time
+        // 3. In this stub, proc_table lock is not acquired,
+        //    so wakeup can edit the proc table and make some RUNNABLE process
+        sti();
+
+        acquire(&proc_table.lk);
+        for(int i=0; i<N_PROCS; i++) {
+            struct proc *p = &proc_table.procs[i];
+            if(p->state != RUNNABLE) continue;
+
+            c->proc = p;
+            // switch_uvm
+            p->state = RUNNING;
+            swtch(&(c->scheduler), p->context);
+            c->proc = 0;
+        }
+        release(&proc_table.lk);
+    }
+}
+
+// It is a first code stub that a fresh thread will execute on first time
+// If a thread was executed once, it will continue from sched and return to yield
+// and release the proc_table lock. 
+// However, if a thread has not executed once, this code will release the lock for us
+// In original xv6, it is called fork_ret because every process except init will be created by fork
+// We have a pure kernel thread, so let's name it slightly different
+void first_ret(void) {
+    static int run_first_init = 1;
+    release(&proc_table.lk);
+
+    if(run_first_init) {
+        // Some init funcs must be run in the context of a process, not main()
+        // (e.g., they call sleep or smth)
+        // So run the init funcs here
+        run_first_init = 0;
+        // init funcs
+    }
+
+    // return to the caller, which is intr_ret if kthread or syscall_ret if user process, 
+}
+
+void intr_ret();
 void make_kthread(void* thread_func) {
     struct proc *p = alloc_kthread();
 
@@ -52,14 +172,36 @@ void make_kthread(void* thread_func) {
         panic("make_kthread: alloc_kthread failed");
     }
     
-    extern pte_t* kpml4;
-    p->pml4 = kpml4;
+    extern pte_t *kpml4;
+    // kpml4 is a kernel mapped address, we need to change it to 
+    // a direct mapped address.
+    uint64_t p_kpml4 = V2P_KERN(kpml4);
+    pte_t *dm_kpml4 = P2V_DIR(p_kpml4);
+    p->pml4 = dm_kpml4;
 
     uint64_t sp = p->kstack + KERNEL_STACK_SIZE;
+
+    // We need to make a trap frame to iretq,
+    // Because we want to turn on the intr flag smoothly
+    sp -= sizeof(struct trap_frame);
+    p->tf = (void*) sp;
+    memset(p->tf, 0, sizeof(struct trap_frame));
+    p->tf->rip = (uint64_t) thread_func;
+    p->tf->cs = (SEG_KCODE << 3);
+    p->tf->rflags = RFLAGS_IF;
+    p->tf->rsp = (uint64_t)(p->kstack + KERNEL_STACK_SIZE);
+    p->tf->ss = (SEG_KDATA << 3);
+
+    sp -= 8;
+    *(uint64_t*)sp = (uint64_t) intr_ret;
+
     sp -= sizeof(struct context);
     p->context = (void*) sp;
     memset(p->context, 0, sizeof(struct context));
-    p->context->rip = (uint64_t) thread_func;
+    p->context->rip = (uint64_t) first_ret;
+
+    // stack -->
+    // struct context and the last field rip = first_ret | intr_ret | struct trap_frame
 
     acquire(&proc_table.lk);
     p->state = RUNNABLE;
@@ -68,33 +210,38 @@ void make_kthread(void* thread_func) {
 
 void proc_a(void) {
     for(;;) {
-        gop_draw_rect(300,300,50,50, 0);
-        gop_draw_rect(300,300,50,50, GOP_BLU);
-        swtch(&proc_table.procs[0].context,proc_table.procs[1].context); 
+        for(int i=0; i<100; i++) {
+            gop_draw_rect(100, 100, 50+i, 50, GOP_BLU);
+        }
+
+        gop_draw_rect(100,100,450,50,GOP_BLK);
     }
 }
 
 void proc_b(void) {
     for(;;) {
-        gop_draw_rect(300,300,50,50, 0);
-        gop_draw_rect(300,300,50,50, GOP_GRN);
-        swtch(&proc_table.procs[1].context,proc_table.procs[2].context); 
+        for(int i=0; i<100; i++) {
+            gop_draw_rect(100, 150, 50+i, 50, GOP_RED);
+        }
+
+        gop_draw_rect(100,150,450,50,GOP_BLK);
     }
 }
 
 void proc_c(void) {
     for(;;) {
-        gop_draw_rect(300,300,50,50, 0);
-        gop_draw_rect(300,300,50,50, GOP_RED);
-        swtch(&proc_table.procs[2].context,proc_table.procs[0].context); 
+        for(int i=0; i<100; i++) {
+            gop_draw_rect(100, 200, 50+i, 50, GOP_GRN);
+        }
+
+        gop_draw_rect(100,200,450,50,GOP_BLK);
     }
 }
 
-void test_swtch(void) {
+void test_scheduler(void) {
     make_kthread(proc_a);
     make_kthread(proc_b);
     make_kthread(proc_c);
 
-    struct context *no_use;
-    swtch(&no_use, (proc_table.procs[0]).context);
+    scheduler();
 }

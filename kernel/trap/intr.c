@@ -5,6 +5,7 @@
 #include <kernel/uart.h>
 #include <kernel/debug.h>
 #include <kernel/lapic.h>
+#include <kernel/proc.h>
 
 struct gate_desc idt[256];
 extern uint64_t vectors[256];
@@ -44,8 +45,14 @@ void idt_init(void) {
 
 void intr(struct trap_frame *tf) {
     if(tf->vector_no == T_IRQ0 + IRQ_TIMER) {
-        serial_printf("Timer\n");
         lapic_eoi();
+        struct proc* p = myproc();
+        // yield if only
+        // 1. It is not a scheduler
+        // 2. if it is RUNNING
+        if(p != 0 && p->state == RUNNING) {
+            yield();
+        }
         return;
     }
 

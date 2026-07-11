@@ -36,6 +36,6 @@ int main(uint32_t mb2_info_phys) {
     bsp_lapic_init();
 
     syscall_init();
-    test_swtch();
+    test_scheduler();
     for(;;);
 }

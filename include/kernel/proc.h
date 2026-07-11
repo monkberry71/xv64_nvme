@@ -32,4 +32,6 @@ struct proc {
 
 void swtch(struct context **, struct context *);
 void make_kthread(void* thread_func);
-void test_swtch(void);
+void test_scheduler(void);
+struct proc* myproc(void);
+void yield(void);

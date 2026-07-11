@@ -40,6 +40,7 @@ extrn intr
 section ".text"
 use64
 public all_intrs
+public intr_ret
 all_intrs:
     ; stack -->
     ; [0]num / [1]err / [2]rip / [3]cs / [4]rflags / [5]ori_rsp / [6]ss

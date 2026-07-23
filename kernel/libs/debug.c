@@ -3,6 +3,7 @@
 #include <kernel/uart.h>
 #include <kernel/x86_64.h>
 #include <kernel/cpu.h>
+#include <kernel/acpi.h>
 
 // Note: mycpu calls panic, so panic should not call mycpu in any way possible
 void panic(char *str) {

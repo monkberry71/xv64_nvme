@@ -20,6 +20,15 @@ void* memcpy(void* dst, void* src, uint64_t n) {
     return dst;
 }
 
+int memcmp(const void* a, const void* b, uint64_t n) {
+    const uint8_t *pa = a;
+    const uint8_t *pb = b;
+    for(int i=0; i<n; i++) {
+        if(pa[i] != pb[i]) return pa[i] - pb[i];
+    }
+    return 0;
+}
+
 static char digits[] = "0123456789ABCDEF";
 static void print_int(putc_t putc, int64_t xx, int base, int sign) {
     char buf[16];

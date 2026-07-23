@@ -55,6 +55,12 @@ struct mb2_tag_mm {
     struct mb2_mmap_entry entries[];
 };
 
+#define MB2_TAG_ACPI 15
+struct mb2_tag_acpi {
+    struct mb2_tag tag;
+    uint8_t rsdp[];
+};
+
 // ==== mb2 iterator ====
 struct mb2_it {
     struct mb2_tag *curr;

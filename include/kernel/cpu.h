@@ -18,7 +18,7 @@ struct cpu {
     // We can use tss.rsp[0], but for now let's use a separate field while testing,
     // since intr references the tss.rsp[0] 
     uint64_t kstack_temp;
-    uint64_t lapic_id; // used for mycpu in the original xv6, we don't need it actually but just in case
+    uint64_t lapic_id;
     struct context* scheduler;
     segment_desc_t gdt[N_SEGS];
     struct task_state_segment tss; 

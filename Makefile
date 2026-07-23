@@ -78,6 +78,7 @@ format_usb: build/usb.img format_esp
 	dd if=build/esp.img of=$< bs=512 seek=2048 conv=notrunc
 
 OVMF = /usr/share/ovmf/OVMF.fd
+SMP ?= 4
 
 #PHONY
 run: format_usb
@@ -85,6 +86,7 @@ run: format_usb
 	-drive if=pflash,format=raw,readonly=on,file=$(OVMF) \
 	-drive format=raw,file=build/usb.img \
 	-m 512M \
+	-smp $(SMP) \
 	-vga std \
 	-serial stdio \
 	-d int,cpu_reset -D ./misc/qemu.log \
@@ -96,6 +98,7 @@ debug: format_usb
 	-drive if=pflash,format=raw,readonly=on,file=$(OVMF) \
 	-drive format=raw,file=build/usb.img \
 	-m 128M \
+	-smp $(SMP) \
 	-vga std \
 	-serial stdio \
 	-monitor vc \

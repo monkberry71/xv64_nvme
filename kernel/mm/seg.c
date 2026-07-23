@@ -4,6 +4,7 @@
 #include <kernel/x86_64.h>
 #include <kernel/string.h>
 #include <kernel/defs.h>
+#include <kernel/acpi.h>
 
 segment_desc_t init_segment_desc(uint64_t access, uint64_t flag) {
     // limit and base are ignored

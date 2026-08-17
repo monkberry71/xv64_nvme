@@ -113,6 +113,64 @@ void yield(void) {
     release(&proc_table.lk);
 }
 
+void sleep(void* chan, struct spin_lock *lk) {
+    struct proc *p = myproc();
+
+    if(p == 0) 
+        panic("sleep: in scheduler");
+
+    // CV pattern : An inner spinlock must protect 
+    if(lk == 0) 
+        panic("sleep: sleep condition was not proctected by a lock");
+    
+    // 0. We have acquired the sleep condition protection lock
+    // 1. We must acquire ptable.lock in order to change a proc state
+    // 2. Once we hold the ptable.lock, we won't miss any wakeup (wakeup acquires ptable.lock)
+    // 3. After acquiring the ptable.lock, it is ok to release the spinlock
+    if(lk != &proc_table.lk) {
+        acquire(&proc_table.lk);
+        release(lk);
+    }
+
+    // Sleep
+    p->chan = chan;
+    p->state = SLEEPING;
+
+    sched();
+
+    // Clean the channel 
+    p->chan = 0;
+
+    // We must release ptable.lk first.
+    // Up above, we acquired the locks in lk -> ptable.lock order
+    // If we try to acquire lk before releasing the ptable.lock,
+    // We are trying the order ptable.lock -> lk
+    // Which obviously means a deadlock.
+    if(lk != &proc_table.lk) {
+        release(&proc_table.lk);
+        acquire(lk);
+    }
+}
+
+// Clean the SLEEPING state of certain-channel procs
+// Pure version, doesn't acquire any locks
+static void wakeup_pure(void *chan) {
+    for(int i=0; i<N_PROCS; i++) {
+        struct proc *p = &proc_table.procs[i];
+
+        if(p->chan == chan && p->state == SLEEPING) 
+            p->state = RUNNABLE;
+    }
+}
+
+// Wrapper for wakeup_pure
+// It acquires ptable.lock
+void wakeup(void* chan) {
+    acquire(&proc_table.lk);
+    wakeup_pure(chan);
+    release(&proc_table.lk);
+}
+
 // no return
 void scheduler(void) {
     struct cpu *c = mycpu();

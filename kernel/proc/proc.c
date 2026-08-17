@@ -223,7 +223,7 @@ void first_ret(void) {
 }
 
 void intr_ret();
-void make_kthread(void* thread_func) {
+void make_kthread(kthread_t kthread_func, uint64_t kthread_arg) {
     struct proc *p = alloc_kthread();
 
     if(!p) {
@@ -244,11 +244,12 @@ void make_kthread(void* thread_func) {
     sp -= sizeof(struct trap_frame);
     p->tf = (void*) sp;
     memset(p->tf, 0, sizeof(struct trap_frame));
-    p->tf->rip = (uint64_t) thread_func;
+    p->tf->rip = (uint64_t) kthread_func;
     p->tf->cs = (SEG_KCODE << 3);
     p->tf->rflags = RFLAGS_IF;
     p->tf->rsp = (uint64_t)(p->kstack + KERNEL_STACK_SIZE);
     p->tf->ss = (SEG_KDATA << 3);
+    p->tf->gprs.rdi = kthread_arg;
 
     sp -= 8;
     *(uint64_t*)sp = (uint64_t) intr_ret;
@@ -266,40 +267,34 @@ void make_kthread(void* thread_func) {
     release(&proc_table.lk);
 }
 
-void proc_a(void) {
-    for(;;) {
-        for(int i=0; i<100; i++) {
-            gop_draw_rect(100, 100, 50+i, 50, GOP_BLU);
-        }
-
-        gop_draw_rect(100,100,450,50,GOP_BLK);
+void proc_draw(uint64_t arg) {
+    uint64_t proc_y;
+    switch(arg) {
+        case GOP_BLU:
+            proc_y = 100;
+            break;
+        case GOP_RED:
+            proc_y = 150;
+            break;
+        case GOP_GRN:
+            proc_y = 200;
+            break;
+        default:
+            proc_y = 50;
     }
-}
-
-void proc_b(void) {
     for(;;) {
         for(int i=0; i<100; i++) {
-            gop_draw_rect(100, 150, 50+i, 50, GOP_RED);
+            gop_draw_rect(100, proc_y, 50+i, 50, arg);
         }
 
-        gop_draw_rect(100,150,450,50,GOP_BLK);
-    }
-}
-
-void proc_c(void) {
-    for(;;) {
-        for(int i=0; i<100; i++) {
-            gop_draw_rect(100, 200, 50+i, 50, GOP_GRN);
-        }
-
-        gop_draw_rect(100,200,450,50,GOP_BLK);
+        gop_draw_rect(100, proc_y, 450, 50, GOP_BLK);
     }
 }
 
 void test_scheduler(void) {
-    make_kthread(proc_a);
-    make_kthread(proc_b);
-    make_kthread(proc_c);
+    make_kthread(proc_draw, GOP_BLU);
+    make_kthread(proc_draw, GOP_RED);
+    make_kthread(proc_draw, GOP_GRN);
 
     scheduler();
 }

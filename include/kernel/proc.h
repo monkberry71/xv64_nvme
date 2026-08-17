@@ -1,6 +1,7 @@
 #pragma once
 #include <stdint.h>
 #include <kernel/mmu.h>
+#include <kernel/spin_lock.h>
 
 enum proc_state { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE};
 
@@ -29,13 +30,12 @@ struct proc {
     // struct inode *cwd;
     char name[32];
 };
+typedef void (*kthread_t) (uint64_t kthread_arg);
 
 void swtch(struct context **, struct context *);
-void make_kthread(void* thread_func, uint64_t kthread_arg);
+void make_kthread(kthread_t kthread_func, uint64_t kthread_arg);
 void test_scheduler(void);
 struct proc* myproc(void);
 void yield(void);
 void sleep(void* chan, struct spin_lock *lk);
 void wakeup(void* chan);
-
-void (*kthread) (uint64_t kthread_arg);

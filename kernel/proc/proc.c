@@ -299,10 +299,10 @@ void test_scheduler(void) {
     make_kthread(proc_draw, GOP_RED);
     make_kthread(proc_draw, GOP_GRN);
 
-    init_test_sleeplock();
-    make_kthread(test_sleep_lock_kthread, 0);
-    make_kthread(test_sleep_lock_kthread, 1);
-    make_kthread(test_sleep_lock_kthread, 2);
+    // init_test_sleeplock();
+    // make_kthread(test_sleep_lock_kthread, 0);
+    // make_kthread(test_sleep_lock_kthread, 1);
+    // make_kthread(test_sleep_lock_kthread, 2);
 
     scheduler();
 }

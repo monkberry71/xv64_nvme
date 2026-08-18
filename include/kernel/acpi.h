@@ -58,8 +58,24 @@ struct madt_it {
     int end;
 };
 
+struct mcfg_entry {
+    uint64_t base_address;
+    uint16_t segment_group;
+    uint8_t start_bus;
+    uint8_t end_bus;
+    uint32_t reserved;
+};
+
+struct mcfg {
+    struct acpi_sdt_header header;
+    uint64_t reserved;
+    struct mcfg_entry entries[];
+};
+
 extern struct cpu cpus[MAX_N_CPUS];
 
+void* xsdt_find_table(const char sig[4]);
 void acpi_init(void);
+
 
 

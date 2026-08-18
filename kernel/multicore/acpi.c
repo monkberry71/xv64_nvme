@@ -11,6 +11,7 @@
 struct cpu cpus[MAX_N_CPUS];
 uint8_t lapic_ids[MAX_N_CPUS];
 int n_cpu;
+struct xsdt *xsdt;
 
 static int checksum_ok(const void* table, uint32_t len) {
     uint8_t sum = 0;
@@ -21,7 +22,7 @@ static int checksum_ok(const void* table, uint32_t len) {
     return sum == 0;
 }
 
-static void* find_xsdt(void) {
+static struct xsdt* find_xsdt(void) {
     struct mb2_it it;
     extern struct mb2_info *reserved_mb2_info;
     mb2_it_init(&it, reserved_mb2_info);
@@ -45,7 +46,7 @@ static void* find_xsdt(void) {
     panic("find_xsdt: no ACPI tag from mb2 bootloader");
 }
 
-void* xsdt_find_table(const struct xsdt *xsdt, const char sig[4]) {
+void* xsdt_find_table(const char sig[4]) {
     int table_length = (xsdt->header.length - sizeof(struct acpi_sdt_header)) / sizeof(uint64_t);
     for(int i=0; i<table_length; i++) {
         const struct acpi_sdt_header* table_header = P2V_DIR(xsdt->table_ptrs[i]);
@@ -70,9 +71,8 @@ void madt_it_next(struct madt_it *it) {
 }
 
 void acpi_init(void) {
-    struct xsdt *xsdt = find_xsdt();
-
-    struct madt *madt = xsdt_find_table(xsdt, "APIC");
+    xsdt = find_xsdt();
+    struct madt *madt = xsdt_find_table("APIC");
 
     if(!madt) {
         panic("acpi_init: MADT not found");

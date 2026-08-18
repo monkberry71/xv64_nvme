@@ -69,6 +69,10 @@ build/usb.img:
 	dd if=/dev/zero of=$@ bs=1M count=128
 #   128MB image
 
+build/fs.img:
+	@mkdir -p build
+	dd if=/dev/zero of=$@ bs=1M count=128
+
 #PHONY
 format_usb: build/usb.img format_esp
 	parted -s $< mklabel gpt
@@ -81,10 +85,13 @@ OVMF = /usr/share/ovmf/OVMF.fd
 SMP ?= 4
 
 #PHONY
-run: format_usb
+run: format_usb build/fs.img
 	qemu-system-x86_64 \
+	-machine q35 \
 	-drive if=pflash,format=raw,readonly=on,file=$(OVMF) \
 	-drive format=raw,file=build/usb.img \
+	-drive if=none,id=nvme0,format=raw,file=build/fs.img \
+	-device nvme,drive=nvme0,serial=deadbeef,logical_block_size=4096,physical_block_size=4096 \
 	-m 512M \
 	-smp $(SMP) \
 	-vga std \

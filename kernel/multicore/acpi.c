@@ -72,8 +72,8 @@ void madt_it_next(struct madt_it *it) {
 
 void mcfg_it_init(struct mcfg_it *it, const struct mcfg *mcfg) {
     it->curr = (struct mcfg_entry *) mcfg->entries;
-    it->limit = (uint8_t*) mcfg + mcfg->header.length;
-    it->end = ((uint8_t*) it->curr >= it->limit);
+    it->limit = (void*) ((uint8_t*) mcfg + mcfg->header.length);
+    it->end = it->curr >= it->limit;
 }
 
 void mcfg_it_next(struct mcfg_it *it) {

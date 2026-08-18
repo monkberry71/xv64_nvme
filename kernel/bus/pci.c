@@ -8,8 +8,8 @@
 struct mcfg *mcfg;
 
 // In the ECAM window to which the MCFG entry points,
-// read the certain register of BDF
-uint32_t pci_read32_ecam(struct mcfg_entry *entry, uint8_t bus, uint8_t dev, uint8_t func, uint16_t offset) {
+// read the certain register of the config space
+static uint32_t pci_read32_ecam(struct mcfg_entry *entry, uint8_t bus, uint8_t dev, uint8_t func, uint16_t offset) {
     uint64_t pa = 
     entry->base_address +
     ((uint64_t)(bus - entry->start_bus) << 20) +
@@ -19,6 +19,43 @@ uint32_t pci_read32_ecam(struct mcfg_entry *entry, uint8_t bus, uint8_t dev, uin
 
     volatile uint32_t *p = P2V_DIR(pa);
     return *p;
+}
+
+// Set the bar entries
+static void pci_fill_bars(struct pci_func *f) {
+    for(int i=0; i<6; i++) {
+        uint32_t raw = pci_read32_ecam(f->mcfg_entry, f->bus, f->dev, f->func, 0x10 + i * 4);
+
+        // 0 -->
+        // Memory Bar? | Memory Bar Type | Prefetchable | Base_addr
+        // 1 | 2 | 1 | ...
+        f->bars[i].base = 0;
+        f->bars[i].size = 0;
+        f->bars[i].is_io = raw & 1;
+        f->bars[i].is_64 = 0;
+        f->bars[i].prefetchable = 0;
+
+        if(raw == 0) continue;
+        if(raw & BIT(0)) {
+            // Port IO Bar
+            f->bars[i].base = raw & (~0x3ULL);
+        } else {
+            // MMIO Bar
+            uint8_t type = (raw >> 1) & 0x3;
+            f->bars[i].prefetchable = (raw >> 3) & 1;
+
+            if(type == 0x2) {
+                // 10 means 64bit
+                uint32_t high = pci_read32_ecam(f->mcfg_entry, f->bus, f->dev, f->func, 0x10 + (i+1) * 4);
+                f->bars[i].base = ((uint64_t) high << 32) | (raw & ~0xFULL);
+                f->bars[i].is_64 = 1;
+                i++;
+            } else {
+                // 00 means 32bit
+                f->bars[i].base = raw & ~0xFULL;
+            }
+        }
+    }
 }
 
 int pci_find_class(uint8_t class_code, uint8_t subclass, uint8_t prog_if, struct pci_func *out) {
@@ -31,7 +68,7 @@ int pci_find_class(uint8_t class_code, uint8_t subclass, uint8_t prog_if, struct
     for(; !it.end; mcfg_it_next(&it)) {
         struct mcfg_entry *e = it.curr;
 
-        for(uint8_t bus = e->start_bus; bus <= e->end_bus; bus++) {
+        for(uint16_t bus = e->start_bus; bus <= e->end_bus; bus++) {
             for(uint8_t dev = 0; dev < 32; dev++) {
                 // Check the func0's config space registers first
                 uint32_t id0 = pci_read32_ecam(e, bus, dev, 0, 0x00);
@@ -64,7 +101,7 @@ int pci_find_class(uint8_t class_code, uint8_t subclass, uint8_t prog_if, struct
                         uint32_t hdr = pci_read32_ecam(e, bus, dev, func, 0x0C);
                         uint8_t header_type = (hdr >> 16) & 0xFF;
 
-                        out->mcfg = e;
+                        out->mcfg_entry = e;
                         out->segment = e->segment_group;
                         out->bus = bus;
                         out->dev = dev;
@@ -75,6 +112,8 @@ int pci_find_class(uint8_t class_code, uint8_t subclass, uint8_t prog_if, struct
                         out->subclass = r_sub_cls;
                         out->prog_if = r_prog_if;
                         out->header_type = header_type;
+
+                        pci_fill_bars(out);
                         return 0;
                     }
                 }

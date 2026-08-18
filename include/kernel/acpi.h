@@ -64,18 +64,27 @@ struct mcfg_entry {
     uint8_t start_bus;
     uint8_t end_bus;
     uint32_t reserved;
-};
+} __attribute__((packed));
 
 struct mcfg {
     struct acpi_sdt_header header;
     uint64_t reserved;
     struct mcfg_entry entries[];
+} __attribute__((packed));
+
+struct mcfg_it {
+    struct mcfg_entry *curr;
+    struct mcfg_entry *limit; // last entry's next addr
+    int end;
 };
 
 extern struct cpu cpus[MAX_N_CPUS];
 
 void* xsdt_find_table(const char sig[4]);
 void acpi_init(void);
+
+void mcfg_it_init(struct mcfg_it *it, const struct mcfg *mcfg);
+void mcfg_it_next(struct mcfg_it *it);
 
 
 

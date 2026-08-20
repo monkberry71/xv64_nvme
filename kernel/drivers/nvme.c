@@ -72,6 +72,7 @@ static void nvme_disable(struct nvme_controller *c) {
 
 // Just init struct itself, not actually register it to the controller
 static void init_nvme_queue_pair(struct nvme_queue_pair *qp, int depth) {
+    qp->qp_id = -1; // -1 not valid, 
     qp->sq.addr = kalloc();
     if(!qp->sq.addr) {
         panic("init_nvme_queue_pair: kalloc failed");
@@ -93,10 +94,13 @@ static void init_nvme_queue_pair(struct nvme_queue_pair *qp, int depth) {
     qp->cq.head = 0;
     qp->cq.tail = 0; 
     qp->expected_phase_bit = 1;
+
+    init_lock(&qp->sq.lk, "sq lk");
+    init_lock(&qp->cq.lk, "cq lk");
 }
 
-static void nvme_make_admin(struct nvme_controller *c, struct nvme_queue_pair *qp) {
-    qp->qp_id = 0;
+static void nvme_make_qp_admin(struct nvme_controller *c, struct nvme_queue_pair *qp) {
+    qp->qp_id = 0; // admin qp_id is always 0
 
     uint32_t aqa = ((qp->cq.size - 1) << 16) | (qp->sq.size - 1);
 
@@ -108,37 +112,73 @@ static void nvme_make_admin(struct nvme_controller *c, struct nvme_queue_pair *q
     qp->cq.doorbell = (void*) ((uint8_t *) c->bar0_reg + 0x1000 + (2 * qp->qp_id + 1) * c->doorbell_stride);
 }
 
+// Push one cmd and ring the bell
+static int nvme_submit_cmd(struct nvme_queue_pair *qp, struct nvme_sq_entry *cmd) {
+    acquire(&qp->sq.lk);
+
+    uint32_t next_tail = (qp->sq.tail + 1) % qp->sq.size;
+    if(next_tail == qp->sq.head) {
+        // full
+        release(&qp->sq.lk);
+        return -1;
+    }
+    
+    uint16_t cid = qp->sq.tail;
+    cmd->cmd_id = cid;
+    struct nvme_sq_entry *sq = qp->sq.addr;
+    sq[qp->sq.tail] = *cmd;
+    qp->sq.tail = (qp->sq.tail + 1) % qp->sq.size;
+    *qp->sq.doorbell = qp->sq.tail;
+
+    release(&qp->sq.lk);
+
+    return cid;
+}
+
+// Try to dequeue the cq, returns the count of entries
+static int nvme_cq_try_dequeue(struct nvme_queue_pair *qp, struct nvme_cq_entry *out) {
+    acquire(&qp->cq.lk);
+
+    volatile struct nvme_cq_entry *cq = qp->cq.addr;
+
+    struct nvme_cq_entry cpl_coppied = cq[qp->cq.head];
+
+    if((cpl_coppied.status & BIT(0)) != qp->expected_phase_bit) {
+        release(&qp->cq.lk);
+        return 0;
+    }
+
+    if(out) *out = cpl_coppied;
+
+    qp->cq.head = (qp->cq.head + 1) % qp->cq.size;
+    if(qp->cq.head == 0) {
+        // phase bit wraparound
+        qp->expected_phase_bit ^= 1;
+    }
+
+    *qp->cq.doorbell = qp->cq.head;
+    
+    release(&qp->cq.lk);
+
+    acquire(&qp->sq.lk);
+    qp->sq.head = cpl_coppied.sq_head; // update sq_head
+    release(&qp->sq.lk);
+
+    return 1;
+}
+
 static int nvme_admin_submit(struct nvme_controller *c, struct nvme_sq_entry *cmd, struct nvme_cq_entry *out) {
     struct nvme_queue_pair *aqp = &c->admin_queue;
 
-    uint16_t cid = aqp->sq.tail;
-    cmd->cmd_id = cid;
+    int cid = nvme_submit_cmd(aqp, cmd);
+    if(cid < 0) return -1;
 
-    struct nvme_sq_entry *sq = aqp->sq.addr;
-    sq[aqp->sq.tail] = *cmd; // Write and ..
+    struct nvme_cq_entry cpl;
+    while(nvme_cq_try_dequeue(aqp, &cpl) == 0);
 
-    aqp->sq.tail++;
-    aqp->sq.tail %= aqp->sq.size;
-    *aqp->sq.doorbell = aqp->sq.tail; // Ring the bell
-
-    struct nvme_cq_entry *cq = aqp->cq.addr;
-
-    // Wait until cq head's phase bit becomes expected bit
-    while((cq[aqp->cq.head].status & BIT(0)) != aqp->expected_phase_bit);
-
-    struct nvme_cq_entry cpl = cq[aqp->cq.head]; // Read and ..
     if(out) *out = cpl;
 
     uint16_t status = cpl.status >> 1;
-
-    aqp->cq.head++;
-    aqp->cq.head %= aqp->cq.size;
-
-    // wrap-around happend, change the expected phase bit
-    if(aqp->cq.head == 0) {
-        aqp->expected_phase_bit ^= 1;
-    }
-    *aqp->cq.doorbell = aqp->cq.head; // Ring the bell
 
     if (status) {
         serial_printf("nvme admin status=%x\n", status);
@@ -148,10 +188,60 @@ static int nvme_admin_submit(struct nvme_controller *c, struct nvme_sq_entry *cm
     return 0;
 }
 
-static void nvme_parse_namespace(void *buf) {
-    uint8_t *b = buf;
+static void nvme_identify_controller(struct nvme_controller *c) {
+    struct nvme_sq_entry idc; // identify command
+    memset(&idc, 0, sizeof(idc));
 
-    uint64_t nsze = *(uint64_t *)(b + 0x00);
+    void* id = kalloc();
+    if(!id) {
+        panic("nvme_init: id buffer can't be alloc");
+    }
+    memset(id, 0, PGSIZE_4KB);
+
+    idc.opcode = 0x06;
+    idc.ns_id = 0;
+    idc.prp1 = V2P_DIR(id);
+    idc.cdw10[0] = 1;
+
+    struct nvme_cq_entry res;
+    if(nvme_admin_submit(&first_nvme, &idc, &res) < 0) {
+        panic("nvme_init: identify controller failed");
+    }
+
+    uint16_t vid = *(uint16_t *)((uint8_t *)id + 0);
+    uint16_t ssvid = *(uint16_t *)((uint8_t *)id + 2);
+    uint8_t mdts = *((uint8_t *)id + 0x4d);
+
+    serial_printf("NVME identify vid=%x ssvid=%x mdts=%d\n", vid, ssvid, mdts);
+    
+    kfree(id);
+}
+
+static void nvme_identify_namespace(struct nvme_controller *c, int ns_id, struct nvme_namespace *out) {
+
+    struct nvme_sq_entry idc;
+    memset(&idc, 0, sizeof(idc));
+
+    void* id = kalloc();
+    if(!id) {
+        panic("nvme_identify_namespace: id buffer can't be alloc");
+    }
+    memset(id, 0, PGSIZE_4KB);
+
+    idc.opcode = 0x06;
+    idc.ns_id = ns_id;
+    idc.prp1 = V2P_DIR(id);
+    idc.cdw10[0] = 0;
+
+    struct nvme_cq_entry res;
+
+    if(nvme_admin_submit(c, &idc, &res) < 0) {
+        panic("nvme_identify_namespace: identify controller failed");
+    }
+
+    uint8_t *b = id;
+
+    uint64_t nsze = *(uint64_t *)(b + 0x00); 
     uint64_t ncap = *(uint64_t *)(b + 0x08);
     uint64_t nuse = *(uint64_t *)(b + 0x10);
 
@@ -166,6 +256,15 @@ static void nvme_parse_namespace(void *buf) {
 
     serial_printf("NVME ns nsze=%p ncap=%p nuse=%p nlbaf=%d format=%d lbads=%d ms=%d lba_size=%d\n",
                 nsze, ncap, nuse, nlbaf, format, lbaf->lbads, lbaf->ms, lba_size);
+
+    if(out) {
+        out->ns_id = ns_id;
+        out->size = nsze;
+        out->capacity = ncap;
+        out->lba_size = lba_size;
+    }
+
+    kfree(id);
 }
 
 void nvme_init(void) {
@@ -174,8 +273,8 @@ void nvme_init(void) {
         panic("nvme_init: nvme not found\n");
     }
 
-    serial_printf("NVME found %d:%d.%d vendor=%x device=%x\n", first_nvme.pci_func.bus, first_nvme.pci_func.dev, first_nvme.pci_func.func, first_nvme.pci_func.vendor_id, first_nvme.pci_func.device_id);
-    serial_printf("NVME BAR0 base=%p io=%d 64=%d prefetch=%d\n", first_nvme.pci_func.bars[0].base, first_nvme.pci_func.bars[0].is_io, first_nvme.pci_func.bars[0].is_64, first_nvme.pci_func.bars[0].prefetchable);
+    serial_printf("PCI:NVME found %d:%d.%d vendor=%x device=%x\n", first_nvme.pci_func.bus, first_nvme.pci_func.dev, first_nvme.pci_func.func, first_nvme.pci_func.vendor_id, first_nvme.pci_func.device_id);
+    serial_printf("PCI:NVME BAR0 base=%p io=%d 64=%d prefetch=%d\n", first_nvme.pci_func.bars[0].base, first_nvme.pci_func.bars[0].is_io, first_nvme.pci_func.bars[0].is_64, first_nvme.pci_func.bars[0].prefetchable);
 
     if(first_nvme.pci_func.bars[0].is_io) {
         panic("nvme_init: BAR0 is not MMIO\n");
@@ -201,7 +300,7 @@ void nvme_init(void) {
 
     // Making an Admin Queue Pair
     init_nvme_queue_pair(&first_nvme.admin_queue, NVME_ADMIN_Q_DEPTH);
-    nvme_make_admin(&first_nvme, &first_nvme.admin_queue);
+    nvme_make_qp_admin(&first_nvme, &first_nvme.admin_queue);
 
     nvme_enable(&first_nvme);
 
@@ -214,44 +313,13 @@ void nvme_init(void) {
 
 
     // Send first identify controller command
-
-    void *id = kalloc();
-    if(!id) {
-        panic("nvme_init: id buffer can't be alloc");
-    }
-    memset(id, 0, PGSIZE_4KB);
-
-    struct nvme_sq_entry idc; // identify command
-    memset(&idc, 0, sizeof(idc));
-
-    idc.opcode = 0x06;
-    idc.ns_id = 0;
-    idc.prp1 = V2P_DIR(id);
-    idc.cdw10[0] = 1;
-
-    struct nvme_cq_entry res;
-    if(nvme_admin_submit(&first_nvme, &idc, &res) < 0) {
-        panic("nvme_init: identify controller failed");
-    }
-
-    uint16_t vid = *(uint16_t *)((uint8_t *)id + 0);
-    uint16_t ssvid = *(uint16_t *)((uint8_t *)id + 2);
-    uint8_t mdts = *((uint8_t *)id + 0x4d);
-
-    serial_printf("NVME identify vid=%x ssvid=%x mdts=%d\n", vid, ssvid, mdts);
+    nvme_identify_controller(&first_nvme);
 
     // Let's pray that there be a namespace marked 1...
+    nvme_identify_namespace(&first_nvme, 1, &first_nvme.ns1);
+
+    // Make a IO queue pair 1
     
-    idc.opcode = 0x06;
-    idc.ns_id = 1;
-    idc.prp1 = V2P_DIR(id);
-    idc.cdw10[0] = 0;
-
-    if(nvme_admin_submit(&first_nvme, &idc, &res) < 0) {
-        panic("nvme_init: identify controller failed");
-    }
-
-    nvme_parse_namespace(id);
 
     log_inits("nvme_init");
 }

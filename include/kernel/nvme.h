@@ -1,6 +1,7 @@
 #pragma once
 #include <stdint.h>
 #include <kernel/pci.h>
+#include <kernel/spin_lock.h>
 
 #define PCI_CLASS_MASS_STORAGE 0x01
 #define PCI_SUBCLASS_NVM 0x08
@@ -23,13 +24,21 @@ struct nvme_queue {
     uint32_t head;
     uint32_t tail;
     volatile uint32_t *doorbell;
+    struct spin_lock lk;
 };
 
 struct nvme_queue_pair {
     struct nvme_queue sq;
     struct nvme_queue cq;
     uint8_t expected_phase_bit;
-    uint16_t qp_id;
+    int16_t qp_id;
+};
+
+struct nvme_namespace {
+    int32_t ns_id;
+    uint64_t size; // number of logical blocks
+    uint64_t capacity; // number of usable blocks
+    uint32_t lba_size; // block byte size
 };
 
 // Cache Useful infos
@@ -37,6 +46,7 @@ struct nvme_controller {
     struct pci_func pci_func;
     void* bar0_reg;
     struct nvme_queue_pair admin_queue;
+    struct nvme_namespace ns1;
 
     uint16_t max_queue_entries;
     uint8_t cqr;
@@ -78,5 +88,7 @@ struct nvme_lbaf {
     uint8_t lbads;
     uint8_t rp;
 } __attribute__((packed));
+
+
 
 void nvme_init(void);

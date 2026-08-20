@@ -21,6 +21,44 @@ static uint32_t pci_read32_ecam(struct mcfg_entry *entry, uint8_t bus, uint8_t d
     return *p;
 }
 
+static void pci_write32_ecam(struct mcfg_entry *entry, uint8_t bus, uint8_t dev, uint8_t func, uint16_t offset, uint32_t val) {
+    uint64_t pa = 
+    entry->base_address +
+    ((uint64_t)(bus - entry->start_bus) << 20) +
+    ((uint64_t)(dev) << 15) +
+    ((uint64_t)(func) << 12) + 
+    offset;
+
+    volatile uint32_t *p = P2V_DIR(pa);
+    *p = val;
+}
+
+// public helpers that operates on struct pci_func
+uint32_t
+pci_func_read32(struct pci_func *f, uint16_t offset) {
+    return pci_read32_ecam(f->mcfg_entry, f->bus, f->dev, f->func, offset);
+}
+
+void
+pci_func_write32(struct pci_func *f, uint16_t offset, uint32_t val) {
+    pci_write32_ecam(f->mcfg_entry, f->bus, f->dev, f->func, offset, val);
+}
+
+// Setup basic
+void pci_enable_device(struct pci_func *f) {
+    uint32_t reg = pci_func_read32(f, 0x04);
+
+    uint16_t cmd = reg & 0xFFFF;
+    uint16_t status = reg >> 16;
+
+    cmd |= BIT(1); // Memoery Space
+    cmd |= BIT(2); // Bus Master 
+    cmd &= ~BIT(10); // Clear the intr disable bit
+
+    reg = ((uint32_t) status << 16) | cmd;
+    pci_func_write32(f, 0x04, reg);
+}
+
 // Set the bar entries
 static void pci_fill_bars(struct pci_func *f) {
     for(int i=0; i<6; i++) {

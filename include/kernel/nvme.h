@@ -21,6 +21,9 @@
 #define NVME_ADMIN_OPCODE_CREATE_IO_SQ 0x01
 #define NVME_ADMIN_OPCODE_CREATE_IO_CQ 0x05
 
+#define NVME_IO_OPCODE_W 0x01
+#define NVME_IO_OPCODE_R 0x02
+
 struct nvme_queue {
     void* addr;
     uint64_t p_addr;
@@ -45,6 +48,13 @@ struct nvme_namespace {
     uint32_t lba_size; // block byte size
 };
 
+struct nvme_block_req {
+    int used;
+    int done;
+    int status;
+    struct buf *buf;
+};
+
 // Cache Useful infos
 struct nvme_controller {
     struct pci_func pci_func;
@@ -52,6 +62,9 @@ struct nvme_controller {
     struct nvme_queue_pair admin_queue;
     struct nvme_queue_pair io_queue;
     struct nvme_namespace ns1;
+
+    struct nvme_block_req reqs[NVME_IO_Q_DEPTH];
+    struct spin_lock req_lk;
 
     uint16_t max_queue_entries;
     uint8_t cqr;

@@ -8,6 +8,7 @@
 #include <kernel/string.h>
 #include <kernel/mmu.h>
 #include <kernel/mem_layout.h>
+#include <kernel/bio.h>
 
 // https://wiki.osdev.org/NVMe
 
@@ -145,6 +146,7 @@ static void nvme_make_qp_io(struct nvme_controller *c, struct nvme_queue_pair *q
     memset(&cmd, 0, sizeof(cmd));
 
     // Make cq first
+    cmd.cmd_id = 1;
     cmd.opcode = NVME_ADMIN_OPCODE_CREATE_IO_CQ;
     cmd.prp1 = qp->cq.p_addr;
     cmd.cdw10[0] = qp->qp_id | ((qp->cq.size - 1) << 16);
@@ -176,8 +178,8 @@ static int nvme_enqueue_cmd(struct nvme_queue_pair *qp, struct nvme_sq_entry *cm
         return -1;
     }
     
-    uint16_t cid = qp->sq.tail;
-    cmd->cmd_id = cid;
+    // uint16_t cid = qp->sq.tail;
+    // cmd->cmd_id = cid;
     struct nvme_sq_entry *sq = qp->sq.addr;
     sq[qp->sq.tail] = *cmd;
     qp->sq.tail = (qp->sq.tail + 1) % qp->sq.size;
@@ -185,7 +187,7 @@ static int nvme_enqueue_cmd(struct nvme_queue_pair *qp, struct nvme_sq_entry *cm
 
     release(&qp->sq.lk);
 
-    return cid;
+    return cmd->cmd_id;
 }
 
 // Try to dequeue the cq, returns the count of entries
@@ -252,6 +254,7 @@ static void nvme_identify_controller(struct nvme_controller *c) {
     }
     memset(id, 0, PGSIZE_4KB);
 
+    idc.cmd_id = 1;
     idc.opcode = 0x06;
     idc.ns_id = 0;
     idc.prp1 = V2P_DIR(id);
@@ -282,6 +285,7 @@ static void nvme_identify_namespace(struct nvme_controller *c, int ns_id, struct
     }
     memset(id, 0, PGSIZE_4KB);
 
+    idc.cmd_id = 1;
     idc.opcode = 0x06;
     idc.ns_id = ns_id;
     idc.prp1 = V2P_DIR(id);
@@ -329,6 +333,7 @@ static int nvme_rw_block(struct nvme_controller *c, uint8_t opcode, uint64_t lba
 
     struct nvme_queue_pair *qp = &c->io_queue;
 
+    cmd.cmd_id = -1; // Avoid req_table id, since this is only for test rw 
     cmd.opcode = opcode;
     cmd.ns_id = c->ns1.ns_id;
     cmd.prp1 = V2P_DIR(buf);
@@ -351,11 +356,111 @@ static int nvme_rw_block(struct nvme_controller *c, uint8_t opcode, uint64_t lba
 }
 
 static int nvme_read_block(struct nvme_controller *c, uint64_t lba, void* buf) {
-    return nvme_rw_block(c, 0x02, lba, buf);
+    return nvme_rw_block(c, NVME_IO_OPCODE_R, lba, buf);
 }
 
 static int nvme_write_block(struct nvme_controller *c, uint64_t lba, void* buf) {
-    return nvme_rw_block(c, 0x01, lba, buf);
+    return nvme_rw_block(c, NVME_IO_OPCODE_W, lba, buf);
+}
+
+int nvme_req_alloc(struct nvme_controller *c, struct buf *b) {
+    acquire(&c->req_lk);
+
+    for(int i=0; i < NVME_IO_Q_DEPTH; i++) {
+        if(c->reqs[i].used) continue;
+
+        struct nvme_block_req *r = &c->reqs[i];
+
+        r->used = 1;
+        r->done = 0;
+        r->status = 0;
+        r->buf = b;
+        release(&c->req_lk);
+        return i;
+    }
+
+    // not found
+    release(&c->req_lk);
+    return -1;
+}
+
+void nvme_req_reap_cpl(struct nvme_controller *c, struct nvme_cq_entry *cpl) {
+    acquire(&c->req_lk);
+
+    struct nvme_block_req *r = &c->reqs[cpl->cmd_id];
+    if(!r->used) {
+        panic("nvme_complete_io: unused request");
+    }
+
+    r->status = cpl->status >> 1;
+
+    if(r->status == 0 && r->buf) {
+        r->buf->flags |= B_VALID; 
+        r->buf->flags &= ~B_DIRTY;
+    }
+
+    r->done = 1;
+    
+    release(&c->req_lk);
+}
+
+void nvme_req_free(struct nvme_controller *c, int req_id) {
+    struct nvme_block_req *r = &c->reqs[req_id];
+
+    acquire(&c->req_lk);
+    r->done = 0;
+    r->status = 0;
+    r->buf = 0;
+    r->used = 0;
+    release(&c->req_lk);
+}
+
+// Sync buf with cisk
+void nvme_rw(struct buf *b) {
+    if(!b) 
+        panic("nvme_rw: no buf");
+    if(!holding_sleep(&b->lock)) 
+        panic("nvme_rw: buf not locked");
+
+    struct nvme_controller *c = b->dev;
+    
+    struct nvme_sq_entry cmd;
+    memset(&cmd, 0, sizeof(cmd));
+    cmd.cmd_id = nvme_req_alloc(c, b);
+    if(cmd.cmd_id < 0) 
+        panic("nvme_rw: no req slot");
+
+    if(b->flags & B_DIRTY) {
+        // need to write
+        cmd.opcode = NVME_IO_OPCODE_W;
+    } else if((b->flags & B_VALID) == 0) {
+        // need to read
+        cmd.opcode = NVME_IO_OPCODE_R;
+    } else {
+        // why did you call me in the first place
+        panic("nvme_rw: nothing to do");
+    }
+
+    cmd.ns_id = c->ns1.ns_id;
+    cmd.prp1 = V2P_DIR(b->dma_buf);
+    cmd.cdw10[0] = (uint32_t) b->block_no;
+    cmd.cdw10[1] = (uint32_t) (b->block_no >> 32);
+    cmd.cdw10[2] = 0; // length - 1
+
+    if(nvme_enqueue_cmd(&c->io_queue, &cmd) < 0)
+        panic("nvme_rw: enqueue failed");
+    
+    struct nvme_cq_entry cpl;
+    while(!c->reqs[cmd.cmd_id].done) {
+        if(nvme_cq_try_dequeue(&c->io_queue, &cpl)) {
+            nvme_req_reap_cpl(c, &cpl);
+        }
+    }
+
+    if(c->reqs[cmd.cmd_id].status)
+        panic("nvme_rw: cmd failed"); 
+
+    nvme_req_free(c, cmd.cmd_id);
 }
 
 void nvme_init(void) {
@@ -428,5 +533,29 @@ void nvme_init(void) {
     nvme_read_block(&first_nvme, 0, test_page);
     serial_printf("NVME read bytes: %s\n", p);
 
+    // Req table init
+    init_lock(&first_nvme.req_lk, "first_nvme req table lock");
+
     log_inits("nvme_init");
+}
+
+void test_nvme_rw(uint64_t arg) {
+    struct buf b;
+    init_sleep_lock(&b.lock, "nvme_rw test kthread's test buf sleep lock");
+    b.flags = 0;
+    b.dma_buf = kalloc();
+    b.dev = &first_nvme;
+    b.ref_count = 1;
+    b.block_no = 1;
+
+    acquire_sleep(&b.lock);
+    nvme_rw(&b);
+    serial_printf("%s\n", b.dma_buf);
+    
+    memcpy(b.dma_buf, "0123456789", 11);
+    b.flags |= B_DIRTY;
+    nvme_rw(&b);
+    release_sleep(&b.lock);
+    serial_printf("%s\n", b.dma_buf);
+    for(;;);
 }

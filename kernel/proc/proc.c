@@ -294,6 +294,7 @@ void proc_draw(uint64_t arg) {
 
 void init_test_sleeplock(void);
 void test_sleep_lock_kthread(uint64_t);
+void test_nvme_rw(uint64_t);
 void test_scheduler(void) {
     make_kthread(proc_draw, GOP_BLU);
     make_kthread(proc_draw, GOP_RED);
@@ -303,6 +304,7 @@ void test_scheduler(void) {
     // make_kthread(test_sleep_lock_kthread, 0);
     // make_kthread(test_sleep_lock_kthread, 1);
     // make_kthread(test_sleep_lock_kthread, 2);
+    make_kthread(test_nvme_rw, 0);
 
     scheduler();
 }

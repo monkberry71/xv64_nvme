@@ -8,7 +8,12 @@ CFLAGS = -m64 \
 -fno-pic \
 -fno-pie \
 -mno-red-zone \
+-mno-sse \
+-mno-sse2 \
+-mno-mmx \
+-mno-80387 \
 -Iinclude \
+-mgeneral-regs-only \
 -mcmodel=kernel
 
 LDFLAGS = -m elf_x86_64 \
@@ -72,6 +77,7 @@ build/usb.img:
 build/fs.img:
 	@mkdir -p build
 	dd if=/dev/zero of=$@ bs=1M count=128
+	printf 'NVME_TEST_0 hello from fs.img\n' | dd of=build/fs.img bs=4096 seek=0 conv=notrunc
 
 #PHONY
 format_usb: build/usb.img format_esp

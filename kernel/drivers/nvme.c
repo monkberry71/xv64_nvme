@@ -13,6 +13,30 @@
 
 static struct nvme_controller first_nvme;
 
+static uint32_t nvme_read32(struct nvme_controller *c, uint32_t off);
+static uint64_t nvme_read64(struct nvme_controller *c, uint32_t off);
+static void nvme_write32(struct nvme_controller *c, uint32_t off, uint32_t val);
+static void nvme_write64(struct nvme_controller *c, uint32_t off, uint64_t val);
+
+static void nvme_cache_cap(struct nvme_controller *c);
+static void nvme_enable(struct nvme_controller *c);
+static void nvme_disable(struct nvme_controller *c);
+
+static void init_nvme_queue_pair(struct nvme_queue_pair *qp, int depth);
+static void nvme_make_qp_admin(struct nvme_controller *c, struct nvme_queue_pair *qp);
+static void nvme_make_qp_io(struct nvme_controller *c, struct nvme_queue_pair *qp, uint16_t qp_id);
+
+static int nvme_enqueue_cmd(struct nvme_queue_pair *qp, struct nvme_sq_entry *cmd);
+static int nvme_cq_try_dequeue(struct nvme_queue_pair *qp, struct nvme_cq_entry *out);
+static int nvme_admin_submit(struct nvme_controller *c, struct nvme_sq_entry *cmd, struct nvme_cq_entry *out);
+
+static void nvme_identify_controller(struct nvme_controller *c);
+static void nvme_identify_namespace(struct nvme_controller *c, int ns_id, struct nvme_namespace *out);
+
+static int nvme_rw_block(struct nvme_controller *c, uint8_t opcode, uint64_t lba, void* buf);
+static int nvme_read_block(struct nvme_controller *c, uint64_t lba, void* buf);
+static int nvme_write_block(struct nvme_controller *c, uint64_t lba, void* buf);
+
 static uint32_t nvme_read32(struct nvme_controller *c, uint32_t off) {
     return *(volatile uint32_t*) ((uint8_t *)c->bar0_reg + off);
 }
@@ -101,6 +125,8 @@ static void init_nvme_queue_pair(struct nvme_queue_pair *qp, int depth) {
 
 static void nvme_make_qp_admin(struct nvme_controller *c, struct nvme_queue_pair *qp) {
     qp->qp_id = 0; // admin qp_id is always 0
+    qp->sq.doorbell = (void*) ((uint8_t *) c->bar0_reg + 0x1000 + (2 * qp->qp_id) * c->doorbell_stride);
+    qp->cq.doorbell = (void*) ((uint8_t *) c->bar0_reg + 0x1000 + (2 * qp->qp_id + 1) * c->doorbell_stride);
 
     uint32_t aqa = ((qp->cq.size - 1) << 16) | (qp->sq.size - 1);
 
@@ -108,12 +134,39 @@ static void nvme_make_qp_admin(struct nvme_controller *c, struct nvme_queue_pair
     nvme_write64(c, NVME_REG_ASQ, qp->sq.p_addr);
     nvme_write64(c, NVME_REG_ACQ, qp->cq.p_addr);
 
+}
+
+static void nvme_make_qp_io(struct nvme_controller *c, struct nvme_queue_pair *qp, uint16_t qp_id) {
+    qp->qp_id = qp_id;
     qp->sq.doorbell = (void*) ((uint8_t *) c->bar0_reg + 0x1000 + (2 * qp->qp_id) * c->doorbell_stride);
     qp->cq.doorbell = (void*) ((uint8_t *) c->bar0_reg + 0x1000 + (2 * qp->qp_id + 1) * c->doorbell_stride);
+
+    struct nvme_sq_entry cmd;
+    memset(&cmd, 0, sizeof(cmd));
+
+    // Make cq first
+    cmd.opcode = NVME_ADMIN_OPCODE_CREATE_IO_CQ;
+    cmd.prp1 = qp->cq.p_addr;
+    cmd.cdw10[0] = qp->qp_id | ((qp->cq.size - 1) << 16);
+    cmd.cdw10[1] = BIT(0);
+
+    if(nvme_admin_submit(c, &cmd, 0) < 0) {
+        panic("nvme_make_qp_io: create cq failed");
+    }
+
+    memset(&cmd, 0, sizeof(cmd));
+    cmd.opcode = NVME_ADMIN_OPCODE_CREATE_IO_SQ;
+    cmd.prp1 = qp->sq.p_addr;
+    cmd.cdw10[0] = qp->qp_id | ((qp->sq.size - 1) << 16);
+    cmd.cdw10[1] = (qp->qp_id << 16) | BIT(0);
+
+    if(nvme_admin_submit(c, &cmd, 0) < 0) {
+        panic("nvme_make_qp_io: create sq failed");
+    }
 }
 
 // Push one cmd and ring the bell
-static int nvme_submit_cmd(struct nvme_queue_pair *qp, struct nvme_sq_entry *cmd) {
+static int nvme_enqueue_cmd(struct nvme_queue_pair *qp, struct nvme_sq_entry *cmd) {
     acquire(&qp->sq.lk);
 
     uint32_t next_tail = (qp->sq.tail + 1) % qp->sq.size;
@@ -167,10 +220,11 @@ static int nvme_cq_try_dequeue(struct nvme_queue_pair *qp, struct nvme_cq_entry 
     return 1;
 }
 
+// Use the helper, and spin wait the complete queue
 static int nvme_admin_submit(struct nvme_controller *c, struct nvme_sq_entry *cmd, struct nvme_cq_entry *out) {
     struct nvme_queue_pair *aqp = &c->admin_queue;
 
-    int cid = nvme_submit_cmd(aqp, cmd);
+    int cid = nvme_enqueue_cmd(aqp, cmd);
     if(cid < 0) return -1;
 
     struct nvme_cq_entry cpl;
@@ -267,6 +321,43 @@ static void nvme_identify_namespace(struct nvme_controller *c, int ns_id, struct
     kfree(id);
 }
 
+static int nvme_rw_block(struct nvme_controller *c, uint8_t opcode, uint64_t lba, void* buf) {
+    struct nvme_sq_entry cmd;
+    struct nvme_cq_entry cpl;
+    memset(&cmd, 0, sizeof(cmd));
+    memset(&cpl, 0, sizeof(cpl));
+
+    struct nvme_queue_pair *qp = &c->io_queue;
+
+    cmd.opcode = opcode;
+    cmd.ns_id = c->ns1.ns_id;
+    cmd.prp1 = V2P_DIR(buf);
+
+    cmd.cdw10[0] = (uint32_t) lba;
+    cmd.cdw10[1] = (uint32_t) (lba >> 32);
+    cmd.cdw10[2] = 0; // length - 1
+
+    if(nvme_enqueue_cmd(qp, &cmd) < 0) return -1;
+
+    while(nvme_cq_try_dequeue(qp, &cpl) == 0);
+
+    uint16_t status = cpl.status >> 1;
+    if(status) {
+        serial_printf("nvme rw status=%x\n", status);
+        return -1;
+    }
+
+    return 0;
+}
+
+static int nvme_read_block(struct nvme_controller *c, uint64_t lba, void* buf) {
+    return nvme_rw_block(c, 0x02, lba, buf);
+}
+
+static int nvme_write_block(struct nvme_controller *c, uint64_t lba, void* buf) {
+    return nvme_rw_block(c, 0x01, lba, buf);
+}
+
 void nvme_init(void) {
 
     if(pci_find_class(PCI_CLASS_MASS_STORAGE, PCI_SUBCLASS_NVM, PCI_PROG_IF_NVME, &first_nvme.pci_func) < 0) {
@@ -318,8 +409,24 @@ void nvme_init(void) {
     // Let's pray that there be a namespace marked 1...
     nvme_identify_namespace(&first_nvme, 1, &first_nvme.ns1);
 
-    // Make a IO queue pair 1
+    // Make a IO queue pair 1    
+    init_nvme_queue_pair(&first_nvme.io_queue, NVME_IO_Q_DEPTH);
+    nvme_make_qp_io(&first_nvme, &first_nvme.io_queue, 1);
+
+    void* test_page = kalloc();
+    if(!test_page) {
+        panic("nvme_init: test_page alloc failed");
+    }
     
+    nvme_read_block(&first_nvme, 0, test_page);
+    uint8_t *p = test_page;
+    serial_printf("NVME read bytes: %s\n", p);
+
+    memcpy(test_page, "REWRITE", 8);
+
+    nvme_write_block(&first_nvme, 0, test_page);
+    nvme_read_block(&first_nvme, 0, test_page);
+    serial_printf("NVME read bytes: %s\n", p);
 
     log_inits("nvme_init");
 }

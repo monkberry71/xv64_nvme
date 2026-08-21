@@ -16,6 +16,10 @@
 #define NVME_REG_ACQ 0x30
 
 #define NVME_ADMIN_Q_DEPTH 64
+#define NVME_IO_Q_DEPTH 64
+
+#define NVME_ADMIN_OPCODE_CREATE_IO_SQ 0x01
+#define NVME_ADMIN_OPCODE_CREATE_IO_CQ 0x05
 
 struct nvme_queue {
     void* addr;
@@ -46,6 +50,7 @@ struct nvme_controller {
     struct pci_func pci_func;
     void* bar0_reg;
     struct nvme_queue_pair admin_queue;
+    struct nvme_queue_pair io_queue;
     struct nvme_namespace ns1;
 
     uint16_t max_queue_entries;

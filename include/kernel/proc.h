@@ -27,7 +27,7 @@ struct proc {
     void* chan;
     int killed;
     // struct file *ofile[N_FILE];
-    // struct inode *cwd;
+    struct inode *cwd;
     char name[32];
 };
 typedef void (*kthread_t) (uint64_t kthread_arg);

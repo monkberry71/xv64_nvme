@@ -19,6 +19,7 @@
 #include <kernel/pci.h>
 #include <kernel/nvme.h>
 #include <kernel/bio.h>
+#include <kernel/fs.h>
 
 // We set edi as a mb2_info_phys in the entry code before jumping to main
 int main(uint32_t mb2_info_phys) {
@@ -44,6 +45,7 @@ int main(uint32_t mb2_info_phys) {
     b_init();
 
     syscall_init();
+    inode_init();
     test_scheduler();
     for(;;);
 }

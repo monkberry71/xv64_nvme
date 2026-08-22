@@ -296,6 +296,9 @@ void init_test_sleeplock(void);
 void test_sleep_lock_kthread(uint64_t);
 void test_nvme_rw(uint64_t);
 void test_bcache(uint64_t);
+void test_fs_read(uint64_t);
+void test_fs_read2(uint64_t);
+
 void test_scheduler(void) {
     make_kthread(proc_draw, GOP_BLU);
     make_kthread(proc_draw, GOP_RED);
@@ -307,6 +310,8 @@ void test_scheduler(void) {
     // make_kthread(test_sleep_lock_kthread, 2);
     // make_kthread(test_nvme_rw, 0);
     // make_kthread(test_bcache, 3);
+    make_kthread(test_fs_read, 1);
+    make_kthread(test_fs_read2, 1);
 
     scheduler();
 }

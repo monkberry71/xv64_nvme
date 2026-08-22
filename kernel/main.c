@@ -18,6 +18,7 @@
 #include <kernel/acpi.h>
 #include <kernel/pci.h>
 #include <kernel/nvme.h>
+#include <kernel/bio.h>
 
 // We set edi as a mb2_info_phys in the entry code before jumping to main
 int main(uint32_t mb2_info_phys) {
@@ -40,6 +41,7 @@ int main(uint32_t mb2_info_phys) {
     acpi_init();
     pci_init();
     nvme_init();
+    b_init();
 
     syscall_init();
     test_scheduler();

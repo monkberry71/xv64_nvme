@@ -48,6 +48,7 @@ struct nvme_namespace {
     uint32_t lba_size; // block byte size
 };
 
+struct buf;
 struct nvme_block_req {
     int used;
     int done;
@@ -110,3 +111,4 @@ struct nvme_lbaf {
 
 
 void nvme_init(void);
+void nvme_rw(struct buf *b);

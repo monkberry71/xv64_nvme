@@ -12,7 +12,7 @@
 
 // https://wiki.osdev.org/NVMe
 
-static struct nvme_controller first_nvme;
+struct nvme_controller first_nvme;
 
 static uint32_t nvme_read32(struct nvme_controller *c, uint32_t off);
 static uint64_t nvme_read64(struct nvme_controller *c, uint32_t off);

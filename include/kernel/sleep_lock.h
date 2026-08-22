@@ -1,3 +1,4 @@
+#pragma once
 #include <stdint.h>
 #include <kernel/spin_lock.h>
 

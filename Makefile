@@ -1,8 +1,9 @@
 CC = gcc
 LD = ld
 AS = fasm
+HOSTCC = gcc
 
-CFLAGS = -m64 \
+KERNEL_CFLAGS = -m64 \
 -ffreestanding \
 -fno-stack-protector \
 -fno-pic \
@@ -16,29 +17,40 @@ CFLAGS = -m64 \
 -mgeneral-regs-only \
 -mcmodel=kernel
 
-LDFLAGS = -m elf_x86_64 \
+KERNEL_LDFLAGS = -m elf_x86_64 \
 -nostdlib \
 -T kernel/linker.ld
 
-.PHONY: run clean debug format_usb format_esp 
+HOST_CFLAGS = -std=c11 -Wall -Wextra -Iinclude
 
-C_SRCS = $(shell find kernel -name '*.c')
-ASM_SRCS = $(shell find kernel -name '*.asm')
-OBJS = $(patsubst kernel/%.c, build/%.o, $(C_SRCS)) $(patsubst kernel/%.asm, build/%.o, $(ASM_SRCS))
+.PHONY: run clean debug format_usb format_esp build_user
+
+KERNEL_C_SRCS = $(shell find kernel -name '*.c')
+KERNEL_ASM_SRCS = $(shell find kernel -name '*.asm')
+KERNEL_OBJS = $(patsubst kernel/%.c, build/kernel/%.o, $(KERNEL_C_SRCS)) $(patsubst kernel/%.asm, build/kernel/%.o, $(KERNEL_ASM_SRCS))
+
+USER_FILES = $(shell find user -type f ! -name 'Makefile' 2>/dev/null)
 
 # Make ELFs
 
-build/%.o: kernel/%.asm
+build/kernel/%.o: kernel/%.asm
 	@mkdir -p $(dir $@)
 	$(AS) $(ASFLAGS) $< $@ 
 # fasm is $< $@
 
-build/%.o: kernel/%.c
+build/kernel/%.o: kernel/%.c
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(KERNEL_CFLAGS) -c $< -o $@
 
-build/kernel.elf: $(OBJS)
-	$(LD) $(LDFLAGS) $^ -o $@
+build/kernel.elf: $(KERNEL_OBJS)
+	$(LD) $(KERNEL_LDFLAGS) $^ -o $@
+
+build/tools/%: tools/%.c
+	@mkdir -p $(dir $@)
+	$(HOSTCC) $(HOST_CFLAGS) $< -o $@
+
+build_user: $(USER_FILES)
+	$(MAKE) -C user BUILD_DIR=../build/user
 
 
 # Make GRUB
@@ -74,11 +86,10 @@ build/usb.img:
 	dd if=/dev/zero of=$@ bs=1M count=128
 #   128MB image
 
-build/fs.img:
+build/fs.img: build/tools/mkfs build_user
 	@mkdir -p build
-	dd if=/dev/zero of=$@ bs=1M count=128
-	printf 'NVME_TEST_0 hello from fs.img\0' | dd of=build/fs.img bs=4096 seek=0 conv=notrunc
-	printf 'NVME_TEST_1 hello nvme_rw\0' | dd of=build/fs.img bs=4096 seek=1 conv=notrunc
+	build/tools/mkfs
+	mv fs.img $@
 
 #PHONY
 format_usb: build/usb.img format_esp

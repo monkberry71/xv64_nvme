@@ -5,7 +5,11 @@
 #define DISK_SIZE (16 * 1024 * 1024)
 #define N_BLKS (DISK_SIZE / BLK_SIZE)
 
+#define BITMAP_BLK 2
+#define INODE_ARR_BLK 3
+
 #define ROOT_INODE 1
+
 
 // struct dinode's size should be a power of two
 // 2 + 2 + 2 + 2 + 8 + (8 * X) 
@@ -55,3 +59,10 @@ struct dir_ent {
     char name[DIR_SIZE];
 };
 
+struct stat {
+    uint16_t type;
+    uint64_t dev;
+    uint64_t ino;
+    uint16_t n_link;
+    uint64_t size; // byte
+};

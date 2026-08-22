@@ -11,9 +11,6 @@
 // Blk layout:
 // zero | sb | free_bitmap | inodes[3] | data...
 
-#define BITMAP_BLK 2
-#define INODE_ARR_BLK 3
-
 typedef struct {
     char bytes[BLK_SIZE];
 } Block;
@@ -50,7 +47,7 @@ int blk_alloc(void) {
 
 struct dinode* inodes = (void*) &img[3];
 int dialloc(uint16_t type) {
-    static int free_dinode_index = 2; // root inode will take 1
+    static int free_dinode_index = ROOT_INODE;
 
     struct dinode *to_alloc = &inodes[free_dinode_index];
     to_alloc->type = type;
@@ -193,10 +190,10 @@ int save_img(void) {
 }
 
 int main(void) {
-    init_sb(N_BLKS, (N_BLKS - 5), (3*BLK_SIZE), INODE_ARR_BLK, BITMAP_BLK);
+    init_sb(N_BLKS, (N_BLKS - 5), (3*INODES_PB), INODE_ARR_BLK, BITMAP_BLK);
 
-    // Manually alloc 5 head bit
-    img[sb->bitmap_start].bytes[0] = 0x1F;
+    // Manually allocate block 0, superblock, bitmap, and inode blocks.
+    img[sb->bitmap_start].bytes[0] = 0x3F;
 
     // Mkae root ino
     struct dinode *rooti = &inodes[dialloc(T_DIR)];

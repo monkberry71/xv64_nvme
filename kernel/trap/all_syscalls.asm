@@ -52,7 +52,7 @@ all_syscalls:
     ; However, syscall itself saves 
     ; 1. The [5]original rip to rcx
     ; 2. The [4]original rflags to r11
-    ; Also we don't need to save [3]cs a]nd [6ss, because it is written in the STAR that which segment we need when ret.
+    ; Also we don't need to save [3]cs and [6]ss, because it is written in the STAR that which segment we need when ret.
     ; There is no [1]err in syscall and the user will set rax as [0]num
     ; So we only need to save [5] ori_rsp
     ; But we are going to fill it like intr, just in case when debugging is needed

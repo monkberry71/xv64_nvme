@@ -523,15 +523,15 @@ void nvme_init(void) {
         panic("nvme_init: test_page alloc failed");
     }
     
-    nvme_read_block(&first_nvme, 0, test_page);
-    uint8_t *p = test_page;
-    serial_printf("NVME read bytes: %s\n", p);
+    // nvme_read_block(&first_nvme, 0, test_page);
+    // uint8_t *p = test_page;
+    // serial_printf("NVME read bytes: %s\n", p);
 
-    memcpy(test_page, "REWRITE", 8);
+    // memcpy(test_page, "REWRITE", 8);
 
-    nvme_write_block(&first_nvme, 0, test_page);
-    nvme_read_block(&first_nvme, 0, test_page);
-    serial_printf("NVME read bytes: %s\n", p);
+    // nvme_write_block(&first_nvme, 0, test_page);
+    // nvme_read_block(&first_nvme, 0, test_page);
+    // serial_printf("NVME read bytes: %s\n", p);
 
     // Req table init
     init_lock(&first_nvme.req_lk, "first_nvme req table lock");

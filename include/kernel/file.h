@@ -3,6 +3,16 @@
 #include <kernel/sleep_lock.h>
 #include <shared/fs.h>
 
+struct file {
+    enum { FD_NONE, FD_PIPE, FD_INODE } type;
+    uint64_t ref;
+    uint8_t readable;
+    uint8_t writable;
+    // struct pipe *pipe;
+    struct inode *ip;
+    uint64_t off;
+};
+
 struct inode {
     uint64_t dev;
     uint64_t inum;
@@ -18,3 +28,9 @@ struct inode {
     uint64_t addrs[N_DIRECT + 1];
 };
 
+struct dev_sw {
+    int64_t (*read)(struct inode*, uint8_t*, uint64_t);
+    int64_t (*write)(struct inode*, uint8_t*, uint64_t);
+};
+
+extern struct dev_sw devs[];

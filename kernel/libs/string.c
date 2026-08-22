@@ -29,6 +29,25 @@ int memcmp(const void* a, const void* b, uint64_t n) {
     return 0;
 }
 
+int strncmp(const char *a, const char *b, uint64_t n) {
+    for(uint64_t i = 0; i < n; i++) {
+        if(a[i] != b[i])
+            return (uint8_t)a[i] - (uint8_t)b[i];
+        if(a[i] == 0)
+            return 0;
+    }
+    return 0;
+}
+
+char *strncpy(char *dst, const char *src, uint64_t n) {
+    uint64_t i;
+    for(i = 0; i < n && src[i] != 0; i++)
+        dst[i] = src[i];
+    for(; i < n; i++)
+        dst[i] = 0;
+    return dst;
+}
+
 static char digits[] = "0123456789ABCDEF";
 static void print_int(putc_t putc, int64_t xx, int base, int sign) {
     char buf[16];

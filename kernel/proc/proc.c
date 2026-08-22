@@ -305,8 +305,8 @@ void test_scheduler(void) {
     // make_kthread(test_sleep_lock_kthread, 0);
     // make_kthread(test_sleep_lock_kthread, 1);
     // make_kthread(test_sleep_lock_kthread, 2);
-    make_kthread(test_nvme_rw, 0);
-    make_kthread(test_bcache, 3);
+    // make_kthread(test_nvme_rw, 0);
+    // make_kthread(test_bcache, 3);
 
     scheduler();
 }

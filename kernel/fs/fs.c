@@ -324,6 +324,12 @@ void stati(struct inode *ip, struct stat *st) {
 
 // caller must hold sleeplock for callee
 int64_t readi(struct inode *ip, uint8_t *dst, uint64_t off, uint64_t n) {
+    if(ip->type == T_DEV) {
+        if(ip->major >= N_DEVS || !devs[ip->major].read) {
+            return -1;
+        }
+        return devs[ip->major].read(ip, dst, n);
+    }
     if(off > ip->size || off > UINT64_MAX - n) return -1;
     if(n > ip->size - off) n = ip->size - off;
 
@@ -340,6 +346,12 @@ int64_t readi(struct inode *ip, uint8_t *dst, uint64_t off, uint64_t n) {
 
 // caller must hold sleeplock for callee
 int64_t writei(struct inode *ip, uint8_t *src, uint64_t off, uint64_t n) {
+    if(ip->type == T_DEV) {
+        if(ip->major >= N_DEVS || !devs[ip->major].write) {
+            return -1;
+        }
+        return devs[ip->major].write(ip, src, n);
+    }
     if(off > ip->size || off > UINT64_MAX - n) return -1;
     if(n > (N_DIRECT + N_INDIRECT) * BLK_SIZE - off) return -1;
 

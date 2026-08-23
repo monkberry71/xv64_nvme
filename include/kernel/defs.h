@@ -9,3 +9,5 @@
 #define N_INODE 50
 #define N_DEVS 10
 #define N_FILES 100
+#define N_OFILES 16
+#define MAX_ARGS 32

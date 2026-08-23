@@ -8,8 +8,8 @@
 
 // extern int64_t sys_chdir(void);
 // extern int64_t sys_close(void);
-// extern int64_t sys_dup(void);
-// extern int64_t sys_exec(void);
+extern int64_t sys_dup(void);
+extern int64_t sys_exec(void);
 // extern int64_t sys_exit(void);
 // extern int64_t sys_fork(void);
 // extern int64_t sys_fstat(void);
@@ -18,14 +18,14 @@
 // extern int64_t sys_link(void);
 // extern int64_t sys_mkdir(void);
 // extern int64_t sys_mknod(void);
-// extern int64_t sys_open(void);
+extern int64_t sys_open(void);
 // extern int64_t sys_pipe(void);
-// extern int64_t sys_read(void);
+extern int64_t sys_read(void);
 // extern int64_t sys_sbrk(void);
 // extern int64_t sys_sleep(void);
 // extern int64_t sys_unlink(void);
 // extern int64_t sys_wait(void);
-// extern int64_t sys_write(void);
+extern int64_t sys_write(void);
 // extern int64_t sys_uptime(void);
 extern int64_t sys_draw(void);
 
@@ -35,18 +35,18 @@ static syscall_func syscalls[] = {
     // [SYS_exit]    =sys_exit,
     // [SYS_wait]    =sys_wait,
     // [SYS_pipe]    =sys_pipe,
-    // [SYS_read]    =sys_read,
+    [SYS_read]    =sys_read,
     // [SYS_kill]    =sys_kill,
-    // [SYS_exec]    =sys_exec,
+    [SYS_exec]    =sys_exec,
     // [SYS_fstat]   =sys_fstat,
     // [SYS_chdir]   =sys_chdir,
-    // [SYS_dup]     =sys_dup,
+    [SYS_dup]     =sys_dup,
     // [SYS_getpid]  =sys_getpid,
     // [SYS_sbrk]    =sys_sbrk,
     // [SYS_sleep]   =sys_sleep,
     // [SYS_uptime]  =sys_uptime,
-    // [SYS_open]    =sys_open,
-    // [SYS_write]   =sys_write,
+    [SYS_open]    =sys_open,
+    [SYS_write]   =sys_write,
     // [SYS_mknod]   =sys_mknod,
     // [SYS_unlink]  =sys_unlink,
     // [SYS_link]    =sys_link,

@@ -1,0 +1,161 @@
+#include <stdint.h>
+#include <kernel/proc.h>
+#include <kernel/file.h>
+#include <kernel/fs.h>
+
+static int fd_alloc(struct file *f) {
+    struct proc *cur_p = myproc();
+
+    for(int fd = 0; fd < N_OFILES; fd++) {
+        if(cur_p->ofile[fd] == 0) {
+            cur_p->ofile[fd] = f;
+            return fd;
+        }
+    }
+    return -1;
+}
+
+#define CHECKFD(fd) if((fd) < 0 || (fd) >= N_OFILES || (myproc()->ofile[(fd)]) == 0) return -1
+
+int64_t sys_dup(void) {
+    int old_fd = myproc()->tf->gprs.rdi;
+    CHECKFD(old_fd);
+
+    struct file *f = myproc()->ofile[old_fd];
+
+    int fd = fd_alloc(f);
+    if(fd < 0) return -1;
+    file_dup(f);
+    return fd;
+}
+
+int64_t sys_read(void) {
+    int fd = myproc()->tf->gprs.rdi;
+    CHECKFD(fd);
+
+    char *p = (void*)myproc()->tf->gprs.rsi;
+    uint64_t n = myproc()->tf->gprs.rdx;
+
+    struct file *f = myproc()->ofile[fd];
+
+    return file_read(f, p, n);
+}
+
+int64_t sys_write(void) {
+    int fd = myproc()->tf->gprs.rdi;
+    CHECKFD(fd);
+
+    char *p = (void*)myproc()->tf->gprs.rsi;
+    uint64_t n = myproc()->tf->gprs.rdx;
+
+    struct file *f = myproc()->ofile[fd];
+
+    return file_write(f, p, n);
+}
+
+// Create locked inode of the path
+static struct inode* create(char *path, uint16_t type, uint16_t major, uint16_t minor) {
+    char name[DIR_SIZE];
+
+    struct inode *dp = namei_parent(path, name);
+    if(!dp) return 0;
+
+    ilock(dp);
+
+    struct inode *ip = dir_lookup(dp, name, 0);
+
+    if(!ip) {
+        iunlock(dp);
+        iput(dp);
+        ilock(ip);
+        if(type == T_FILE && ip->type == T_FILE) return ip;
+        iunlock(ip);
+        iput(ip);
+        return 0;
+    }
+
+    ip = ialloc(type);
+    if(!ip)
+        panic("create: ialloc failed");
+
+    ilock(ip);
+    ip->major = major;
+    ip->minor = minor;
+    ip->n_link = 1;
+    iupdate(ip);
+
+    if(type == T_DIR) {
+        dp->n_link++;
+        iupdate(dp);
+
+        if(dir_link(ip, ".", ip->inum) < 0 || dir_link(ip, "..", dp->inum) < 0) {
+            panic("create: dots dir entry failed");
+        }
+    }
+
+    if(dir_link(dp, name, ip->inum) < 0)
+        panic("create: cant belong to the parent");
+    
+    iunlock(dp);
+    iput(dp);
+
+    return ip;
+}
+
+int64_t sys_open(void) {
+    char *path = (void *) myproc()->tf->gprs.rdi;
+    uint64_t omode = myproc()->tf->gprs.rsi;
+
+    struct inode *ip;
+
+    if(omode & O_CREATE) {
+        // create
+        ip = create(path, T_FILE, 0, 0);
+        if(!ip) return -1;
+    } else {
+        // edit
+        ip = namei(path);
+        if(!ip) return -1;
+        ilock(ip);
+        if(ip->type == T_DIR && omode != O_RDONLY) {
+            // open cannot edit dir
+            iunlock(ip);
+            iput(ip);
+            return -1;
+        }
+    }
+
+    struct file *f = file_alloc();
+    if(!f) {
+        iunlock(ip);
+        iput(ip);
+        return -1;
+    }
+
+    int fd = fd_alloc(f);
+    if(fd < 0) {
+        file_close(f);
+        iunlock(ip);
+        iput(ip);
+        return -1;
+    }
+
+    iunlock(ip);
+
+    // we dont need the ftable lock, because when file_alloc, with lock, it increase the ref, so other thread wont pick it
+    f->type = FD_INODE;
+    f->ip = ip;
+    f->off = 0;
+    f->readable = !(omode & O_WRONLY); // wr only on -> no read
+    f->writable = (omode & O_WRONLY) || (omode & O_RDWR); // WRONLY or RDRW -> writable
+
+    return fd;
+}
+
+int64_t exec(char *, char **);
+int64_t sys_exec(void) {
+    char *path = (void *) myproc()->tf->gprs.rdi;
+    char **argv = (void *) myproc()->tf->gprs.rsi;
+
+    return exec(path, argv);
+}

@@ -26,7 +26,7 @@ struct proc {
     struct context *context;
     void* chan;
     int killed;
-    // struct file *ofile[N_FILE];
+    struct file *ofile[N_OFILES];
     struct inode *cwd;
     char name[32];
 };
@@ -39,3 +39,4 @@ struct proc* myproc(void);
 void yield(void);
 void sleep(void* chan, struct spin_lock *lk);
 void wakeup(void* chan);
+int64_t exec(char *path, char **argv);

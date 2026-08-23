@@ -104,7 +104,7 @@ static struct inode* create(char *path, uint16_t type, uint16_t major, uint16_t 
 
     struct inode *ip = dir_lookup(dp, name, 0);
 
-    if(!ip) {
+    if(ip) {
         iunlock(dp);
         iput(dp);
         ilock(ip);
@@ -190,6 +190,16 @@ int64_t sys_open(void) {
     f->writable = (omode & O_WRONLY) || (omode & O_RDWR); // WRONLY or RDRW -> writable
 
     return fd;
+}
+
+int64_t sys_mkdir(void) {
+    char *path = (void*) myproc()->tf->gprs.rdi;
+
+    struct inode *ip = create(path, T_DIR, 0, 0);
+    if(!ip) return -1;
+    iunlock(ip);
+    iput(ip);
+    return 0;
 }
 
 int64_t sys_pipe(void) {

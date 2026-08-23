@@ -16,7 +16,7 @@ extern int64_t sys_fstat(void);
 // extern int64_t sys_getpid(void);
 // extern int64_t sys_kill(void);
 // extern int64_t sys_link(void);
-// extern int64_t sys_mkdir(void);
+extern int64_t sys_mkdir(void);
 // extern int64_t sys_mknod(void);
 extern int64_t sys_open(void);
 extern int64_t sys_pipe(void);
@@ -50,7 +50,7 @@ static syscall_func syscalls[] = {
     // [SYS_mknod]   =sys_mknod,
     // [SYS_unlink]  =sys_unlink,
     // [SYS_link]    =sys_link,
-    // [SYS_mkdir]   =sys_mkdir,
+    [SYS_mkdir]   =sys_mkdir,
     [SYS_close]   =sys_close,
     [SYS_draw]    =sys_draw
 };

@@ -6,6 +6,12 @@
 #define GOP_BLK 0x00000000
 #define GOP_WHI 0x00FFFFFF
 
+struct gop_fb {
+    void* fb_base;
+    uint64_t w,h,pitch;
+    uint8_t bpp, type;
+};
+
 int gop_init(void);
 void gop_draw_pixel(uint64_t x, uint64_t y, uint64_t col);
 void gop_draw_rect(uint64_t x, uint64_t y, uint64_t w, uint64_t h, uint64_t color);

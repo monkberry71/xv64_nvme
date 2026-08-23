@@ -5,11 +5,7 @@
 #include <kernel/helper.h>
 #include <kernel/debug.h>
 
-struct {
-    void* fb_base;
-    uint64_t w,h,pitch;
-    uint8_t bpp, type;
-} gop_fb;
+struct gop_fb gop_fb;
 
 int gop_init(void) {
     extern const struct mb2_info *reserved_mb2_info;

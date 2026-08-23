@@ -33,4 +33,7 @@ struct dev_sw {
     int64_t (*write)(struct inode*, uint8_t*, uint64_t);
 };
 
+#define CONSOLE_DEVNUM 1
 extern struct dev_sw devs[];
+
+void file_init(void);

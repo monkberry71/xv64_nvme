@@ -11,3 +11,4 @@ void* memcpy(void* dst, void* src, uint64_t n);
 int memcmp(const void* a, const void* b, uint64_t n);
 int strncmp(const char *a, const char *b, uint64_t n);
 char *strncpy(char *dst, const char *src, uint64_t n);
+uint64_t strlen(const char *s);

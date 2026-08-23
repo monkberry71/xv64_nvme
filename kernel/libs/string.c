@@ -48,6 +48,13 @@ char *strncpy(char *dst, const char *src, uint64_t n) {
     return dst;
 }
 
+uint64_t strlen(const char *s) {
+    uint64_t n = 0;
+    while(s[n])
+        n++;
+    return n;
+}
+
 static char digits[] = "0123456789ABCDEF";
 static void print_int(putc_t putc, int64_t xx, int base, int sign) {
     char buf[16];

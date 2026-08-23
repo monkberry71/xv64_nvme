@@ -6,7 +6,7 @@
 #include <kernel/debug.h>
 
 
-// extern int64_t sys_chdir(void);
+extern int64_t sys_chdir(void);
 extern int64_t sys_close(void);
 extern int64_t sys_dup(void);
 extern int64_t sys_exec(void);
@@ -39,7 +39,7 @@ static syscall_func syscalls[] = {
     // [SYS_kill]    =sys_kill,
     [SYS_exec]    =sys_exec,
     [SYS_fstat]   =sys_fstat,
-    // [SYS_chdir]   =sys_chdir,
+    [SYS_chdir]   =sys_chdir,
     [SYS_dup]     =sys_dup,
     // [SYS_getpid]  =sys_getpid,
     [SYS_sbrk]    =sys_sbrk,

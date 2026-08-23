@@ -72,6 +72,26 @@ int64_t sys_fstat(void) {
     return file_stat(f, st);
 }
 
+int64_t sys_chdir(void) {
+    char *path = (void*) myproc()->tf->gprs.rdi;
+    struct inode *ip = namei(path);
+
+    if(!ip) return -1;
+
+    ilock(ip);
+    if(ip->type != T_DIR) {
+        // chdir to non-dir
+        iunlock(ip);
+        iput(ip);
+        return -1;
+    }
+    iunlock(ip);
+
+    iput(myproc()->cwd);
+    myproc()->cwd = ip;
+    return 0;
+}
+
 // Create locked inode of the path
 static struct inode* create(char *path, uint16_t type, uint16_t major, uint16_t minor) {
     char name[DIR_SIZE];

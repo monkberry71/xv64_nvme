@@ -7,7 +7,7 @@
 
 
 // extern int64_t sys_chdir(void);
-// extern int64_t sys_close(void);
+extern int64_t sys_close(void);
 extern int64_t sys_dup(void);
 extern int64_t sys_exec(void);
 extern int64_t sys_exit(void);
@@ -51,7 +51,7 @@ static syscall_func syscalls[] = {
     // [SYS_unlink]  =sys_unlink,
     // [SYS_link]    =sys_link,
     // [SYS_mkdir]   =sys_mkdir,
-    // [SYS_close]   =sys_close,
+    [SYS_close]   =sys_close,
     [SYS_draw]    =sys_draw
 };
 

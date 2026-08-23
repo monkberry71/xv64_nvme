@@ -91,8 +91,7 @@ build/usb.img:
 
 build/fs.img: build/tools/mkfs build_user
 	@mkdir -p build
-	build/tools/mkfs
-	mv fs.img $@
+	cd build && ./tools/mkfs
 
 #PHONY
 format_usb: build/usb.img format_esp

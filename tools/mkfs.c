@@ -195,7 +195,7 @@ int main(void) {
     // Manually allocate block 0, superblock, bitmap, and inode blocks.
     img[sb->bitmap_start].bytes[0] = 0x3F;
 
-    // Mkae root ino
+    // Make root ino
     struct dinode *rooti = &inodes[dialloc(T_DIR)];
     rooti->n_link = 1;
     dir_link(rooti, ".", ROOT_INODE);
@@ -218,6 +218,7 @@ int main(void) {
     dir_link(ddi, "console", console_ino);
 
     add_file(rooti, "test_file.txt");
+    add_file(rooti, "init");
 
     save_img();
 }

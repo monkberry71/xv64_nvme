@@ -25,3 +25,4 @@ struct console {
 
 void console_init(void);
 void console_printf(char *fmt, ...);
+void console_intr(void);

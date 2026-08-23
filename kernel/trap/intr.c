@@ -56,6 +56,12 @@ void intr(struct trap_frame *tf) {
         return;
     }
 
+    if(tf->vector_no == T_IRQ0 + IRQ_KBD) {
+        kbd_intr();
+        lapic_eoi();
+        return;
+    }
+
     serial_printf("[INTR]: Unhandled %d\n", tf->vector_no);
     panic("intr: unhandled");
 

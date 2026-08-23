@@ -21,7 +21,20 @@ int main(void) {
     wait();
     write(1, "parent\n", 7);
 
-    for(;;);
+    char c;
+
+    for(;;) {
+    int n = read(0, &c, 1);
+    if(n < 0) {
+        write(1, "read error\n", 11);
+        continue;
+    }
+    if(n == 0) {
+        write(1, "EOF\n", 4);
+        continue;
+    }
+    write(1, &c, 1);
+}
 
     // for(;;) {
     //     printf(1, "init: starting sh\n");

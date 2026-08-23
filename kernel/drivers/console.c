@@ -6,6 +6,10 @@
 #include <kernel/file.h>
 #include <stdarg.h>
 #include <kernel/helper.h>
+#include <kernel/string.h>
+#include <kernel/fs.h>
+#include <kernel/proc.h>
+#include <kernel/kbd.h>
 
 struct console cons;
 
@@ -90,7 +94,15 @@ void console_printf(char *fmt, ...) {
     if(cons.locking) release(&cons.lk);
 }
 
-int64_t console_write(struct inode* ip, uint8_t *buf, uint64_t n) {
+#define INPUT_BUF 128
+struct {
+    char buf[INPUT_BUF];
+    uint32_t r;  // Read index
+    uint32_t w;  // Write index
+    uint32_t e;  // Edit index
+} input;
+
+int64_t console_write(struct inode *ip, uint8_t *buf, uint64_t n) {
     iunlock(ip);
     acquire(&cons.lk);
     int64_t i;
@@ -101,6 +113,75 @@ int64_t console_write(struct inode* ip, uint8_t *buf, uint64_t n) {
     ilock(ip);
 
     return i;
+}
+
+void console_intr(void) {
+    acquire(&cons.lk);
+    int c;
+    while((c = kbd_getc()) >= 0) {
+        switch(c) {
+            case C('U'): { // delete the whole line buffer
+                while(input.e != input.w && input.buf[(input.e-1) % INPUT_BUF] != '\n') {
+                    input.e--;
+                    console_putc('\b');
+                }
+                break;
+            }
+            case C('H'): {
+                if(input.e != input.w) {
+                    input.e--;
+                    console_putc('\b');
+                }
+                break;
+            }
+            default: {
+                if(c != 0 && input.e - input.r < INPUT_BUF) {
+                    c = (c == '\r') ? '\n' : c; // change /r to /n, both are enters
+                    input.buf[input.e++ % INPUT_BUF] = c;
+                    console_putc(c);
+                    if(c == '\n' || c == C('D') || input.e == input.r + INPUT_BUF) {
+                        input.w = input.e; // update input.w to input.e
+                        wakeup(&input.r);
+                    }
+                }
+            }
+
+        }
+    }
+    release(&cons.lk);
+}
+
+int64_t console_read(struct inode* ip, uint8_t *dst, uint64_t n) {
+    iunlock(ip);
+    int target = n; // original requesteed amount, n becomes remaining amount
+    acquire(&cons.lk);
+    while(n > 0) {
+        while(input.r == input.w) {
+            // condition variable, wait until input.w is updated to input.e 
+            if(myproc()->killed) {
+                release(&cons.lk);
+                ilock(ip);
+                return -1;
+            }
+            sleep(&input.r, &cons.lk);
+        }
+
+
+        int c = input.buf[input.r++ % INPUT_BUF];
+        if(c == C('D')) {
+            if(n < target) { // have we copied at least one byte?
+                // save ctrl+d for next time, to make sure caller gets a 0 byte result
+                input.r--;
+            }
+            break;
+        }
+        *dst++ = c;
+        n--;
+        if(c == '\n') break;
+    }
+    release(&cons.lk);
+    ilock(ip);
+    return target - n; // actually read byte
 }
 
 extern struct dev_sw devs[N_DEVS];
@@ -127,7 +208,7 @@ void console_init(void) {
     // pitch means byte per row
     
     devs[CONSOLE_DEVNUM].write = console_write;
-    // devs[CONSOLE_DEVNUM].read = console_read;
+    devs[CONSOLE_DEVNUM].read = console_read;
     cons.locking = 1;
 
 }

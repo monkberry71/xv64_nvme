@@ -22,6 +22,8 @@
 #include <kernel/fs.h>
 #include <kernel/file.h>
 #include <kernel/console.h>
+#include <kernel/kbd.h>
+#include <kernel/ioapic.h>
 
 // We set edi as a mb2_info_phys in the entry code before jumping to main
 int main(uint32_t mb2_info_phys) {
@@ -51,6 +53,8 @@ int main(uint32_t mb2_info_phys) {
     file_init();
     console_init();
     console_printf("Hello\n");
+    ioapic_init();
+    kbd_init();
     test_scheduler();
     for(;;);
 }

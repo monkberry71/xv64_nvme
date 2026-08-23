@@ -219,6 +219,11 @@ int main(void) {
 
     add_file(rooti, "test_file.txt");
     add_file(rooti, "init");
+    add_file(rooti, "nsh");
+    add_file(rooti, "cat");
+    add_file(rooti, "echo");
+    add_file(rooti, "mkdir");
+    add_file(rooti, "ls");
 
     save_img();
 }

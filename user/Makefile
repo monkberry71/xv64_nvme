@@ -18,9 +18,9 @@ LDFLAGS = -m elf_x86_64 \
 U_FILES = $(wildcard *.txt)
 U_FILE_TARGETS = $(U_FILES:%=$(BUILD_DIR)/%) 
 
-U_LIBS = $(BUILD_DIR)/usys.o $(BUILD_DIR)/ulib.o
+U_LIBS = $(BUILD_DIR)/usys.o $(BUILD_DIR)/ulib.o $(BUILD_DIR)/malloc.o
 
-U_PROGS = init
+U_PROGS = init nsh cat echo mkdir ls
 
 .PHONY: all clean
 

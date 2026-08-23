@@ -2,6 +2,7 @@
 #include <kernel/proc.h>
 #include <kernel/file.h>
 #include <kernel/fs.h>
+#include <kernel/pipe.h>
 
 static int fd_alloc(struct file *f) {
     struct proc *cur_p = myproc();
@@ -191,3 +192,29 @@ int64_t sys_open(void) {
     return fd;
 }
 
+int64_t sys_pipe(void) {
+    int *fd = (void*) myproc()->tf->gprs.rdi;
+
+    struct file *rf, *wf;
+    if(pipe_alloc(&rf, &wf) < 0) return -1;
+
+    int fd0 = fd_alloc(rf);
+    if(fd0 < 0) {
+        file_close(rf);
+        file_close(wf);
+        return -1;
+    }
+
+    int fd1 = fd_alloc(wf);
+    if(fd1 < 0) {
+        myproc()->ofile[fd0] = 0;
+        file_close(rf);
+        file_close(wf);
+        return -1;
+    }
+
+    fd[0] = fd0;
+    fd[1] = fd1;
+
+    return 0;
+}

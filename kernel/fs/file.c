@@ -4,6 +4,7 @@
 #include <kernel/fs.h>
 #include <kernel/defs.h>
 #include <kernel/debug.h>
+#include <kernel/pipe.h>
 
 struct dev_sw devs[N_DEVS];
 
@@ -32,6 +33,12 @@ struct file* file_alloc(void) {
         if(f->ref) continue;
 
         f->ref = 1;
+        f->type = FD_NONE;
+        f->readable = 0;
+        f->writable = 0;
+        f->pipe = 0;
+        f->ip = 0;
+        f->off = 0;
         release(&ftable.lk);
         return f;
     }
@@ -66,7 +73,7 @@ void file_close(struct file *f) {
     release(&ftable.lk);
 
     if(ff.type == FD_PIPE) {
-        // pipe close
+        pipe_close(ff.pipe, ff.writable);
     } else if(ff.type == FD_INODE) {
         iput(ff.ip);
     }
@@ -86,7 +93,7 @@ int64_t file_read(struct file *f, uint8_t *addr, uint64_t n) {
     if(f->readable == 0) return -1;
     if(f->type == FD_PIPE) {
         // pipe read
-        return -1;
+        return pipe_read(f->pipe, addr, n);
     }
     if(f->type == FD_INODE) {
         ilock(f->ip);
@@ -103,7 +110,7 @@ int64_t file_read(struct file *f, uint8_t *addr, uint64_t n) {
 int64_t file_write(struct file *f, uint8_t *addr, uint64_t n) {
     if(f->writable == 0) return -1;
     if(f->type == FD_PIPE) {
-        return -1;
+        return pipe_write(f->pipe, addr, n);
     }
     if(f->type == FD_INODE) {
         ilock(f->ip);

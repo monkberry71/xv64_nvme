@@ -19,7 +19,7 @@ extern int64_t sys_fstat(void);
 // extern int64_t sys_mkdir(void);
 // extern int64_t sys_mknod(void);
 extern int64_t sys_open(void);
-// extern int64_t sys_pipe(void);
+extern int64_t sys_pipe(void);
 extern int64_t sys_read(void);
 extern int64_t sys_sbrk(void);
 // extern int64_t sys_sleep(void);
@@ -34,7 +34,7 @@ static syscall_func syscalls[] = {
     [SYS_fork]    =sys_fork,
     [SYS_exit]    =sys_exit,
     [SYS_wait]    =sys_wait,
-    // [SYS_pipe]    =sys_pipe,
+    [SYS_pipe]    =sys_pipe,
     [SYS_read]    =sys_read,
     // [SYS_kill]    =sys_kill,
     [SYS_exec]    =sys_exec,

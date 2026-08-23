@@ -8,12 +8,13 @@
 #define O_RDWR    0x002
 #define O_CREATE  0x200
 
+struct pipe;
 struct file {
     enum { FD_NONE, FD_PIPE, FD_INODE } type;
     uint64_t ref;
     uint8_t readable;
     uint8_t writable;
-    // struct pipe *pipe;
+    struct pipe *pipe;
     struct inode *ip;
     uint64_t off;
 };

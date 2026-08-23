@@ -43,3 +43,4 @@ int64_t exec(char *path, char **argv);
 int64_t fork(void);
 int64_t wait(void);
 void exit(void);
+int64_t grow_proc(int64_t n);

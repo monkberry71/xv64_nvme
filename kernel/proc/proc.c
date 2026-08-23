@@ -447,6 +447,23 @@ void exit(void) {
     panic("I am dead");
 }
 
+int64_t grow_proc(int64_t n) {
+    struct proc *cp = myproc();
+    uint64_t sz = cp->sz;
+
+    if(n > 0) {
+        sz = alloc_uvm(cp->pml4, sz, sz+n);
+        if(!sz) return -1;
+    } else if(n < 0) {
+        sz = dealloc_uvm(cp->pml4, sz, sz+n);
+        if(!sz) return -1;
+    }
+
+    cp->sz = sz;
+    switch_uvm(cp);
+    return 0;
+}
+
 void proc_draw(uint64_t arg) {
     uint64_t proc_y;
     switch(arg) {

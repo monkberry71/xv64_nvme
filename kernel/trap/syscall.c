@@ -21,7 +21,7 @@ extern int64_t sys_fork(void);
 extern int64_t sys_open(void);
 // extern int64_t sys_pipe(void);
 extern int64_t sys_read(void);
-// extern int64_t sys_sbrk(void);
+extern int64_t sys_sbrk(void);
 // extern int64_t sys_sleep(void);
 // extern int64_t sys_unlink(void);
 extern int64_t sys_wait(void);
@@ -42,7 +42,7 @@ static syscall_func syscalls[] = {
     // [SYS_chdir]   =sys_chdir,
     [SYS_dup]     =sys_dup,
     // [SYS_getpid]  =sys_getpid,
-    // [SYS_sbrk]    =sys_sbrk,
+    [SYS_sbrk]    =sys_sbrk,
     // [SYS_sleep]   =sys_sleep,
     // [SYS_uptime]  =sys_uptime,
     [SYS_open]    =sys_open,

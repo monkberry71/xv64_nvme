@@ -42,8 +42,11 @@ build/kernel/%.o: kernel/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(KERNEL_CFLAGS) -c $< -o $@
 
-build/kernel.elf: $(KERNEL_OBJS)
-	$(LD) $(KERNEL_LDFLAGS) $^ -o $@
+build/kernel.elf: $(KERNEL_OBJS) build_user
+	$(LD) $(KERNEL_LDFLAGS) $(KERNEL_OBJS) \
+	-b binary build/user/init_code \
+	--oformat elf64-x86-64 \
+	-o $@
 
 build/tools/%: tools/%.c
 	@mkdir -p $(dir $@)

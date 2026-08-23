@@ -12,7 +12,14 @@ int main(void) {
     dup(0); // stdout 1
     dup(0); // stderr 2
 
-    write(1, "init", 5);
+
+    int pid = fork();
+    if(pid == 0) {
+        write(1, "child\n", 6);
+        exit();
+    }
+    wait();
+    write(1, "parent\n", 7);
 
     for(;;);
 

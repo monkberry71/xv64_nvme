@@ -409,6 +409,44 @@ int64_t wait(void) {
     }
 }
 
+void exit(void) {
+    struct proc *cur_p = myproc();
+    if(cur_p == init_proc)
+        panic("exit: init cannot exit");
+    
+    for(int fd=0; fd<N_OFILES; fd++) {
+        if(cur_p->ofile[fd]) {
+            file_close(cur_p->ofile[fd]);
+            cur_p->ofile[fd] = 0;
+        }
+    }
+
+    if(cur_p->cwd) {
+        iput(cur_p->cwd);
+        cur_p->cwd = 0;
+    }
+
+    acquire(&proc_table.lk);
+
+    // Tell my parent I love them very much
+    wakeup_pure(cur_p->parent);
+
+    // I'm going to die, please adopt my children
+    for(int i=0; i<N_PROCS; i++) {
+        struct proc *p = &proc_table.procs[i];
+        if(p->parent != cur_p) continue;
+
+        p->parent = init_proc;
+        if(p->state == ZOMBIE)
+            wakeup_pure(init_proc);
+    }
+
+    // Goodbye
+    cur_p->state = ZOMBIE;
+    sched();
+    panic("I am dead");
+}
+
 void proc_draw(uint64_t arg) {
     uint64_t proc_y;
     switch(arg) {

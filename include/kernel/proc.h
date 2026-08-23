@@ -42,3 +42,4 @@ void wakeup(void* chan);
 int64_t exec(char *path, char **argv);
 int64_t fork(void);
 int64_t wait(void);
+void exit(void);

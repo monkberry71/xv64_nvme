@@ -47,3 +47,4 @@ int64_t file_read(struct file *f, uint8_t *addr, uint64_t n);
 int64_t file_write(struct file *f, uint8_t *addr, uint64_t n);
 void file_close(struct file *f);
 struct file* file_alloc(void);
+int file_stat(struct file *f, struct stat *st);

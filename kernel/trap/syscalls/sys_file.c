@@ -62,6 +62,16 @@ int64_t sys_close(void) {
     return 0;
 }
 
+int64_t sys_fstat(void) {
+    int fd = myproc()->tf->gprs.rdi;
+    CHECKFD(fd);
+    struct stat *st = (void*) myproc()->tf->gprs.rsi;
+    struct file *f = myproc()->ofile[fd];
+
+    if(!st) return -1;
+    return file_stat(f, st);
+}
+
 // Create locked inode of the path
 static struct inode* create(char *path, uint16_t type, uint16_t major, uint16_t minor) {
     char name[DIR_SIZE];

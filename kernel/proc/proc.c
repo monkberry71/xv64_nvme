@@ -465,26 +465,30 @@ int64_t grow_proc(int64_t n) {
 }
 
 void proc_draw(uint64_t arg) {
-    uint64_t proc_y;
+    extern struct gop_fb gop_fb;
+
+    uint64_t proc_x = gop_fb.w > 170 ? gop_fb.w - 170 : 0;
+    uint64_t proc_y = gop_fb.h > 170 ? gop_fb.h - 170 : 0;
+
     switch(arg) {
         case GOP_BLU:
-            proc_y = 100;
+            proc_y += 0;
             break;
         case GOP_RED:
-            proc_y = 150;
+            proc_y += 50;
             break;
         case GOP_GRN:
-            proc_y = 200;
+            proc_y += 100;
             break;
         default:
-            proc_y = 50;
+            proc_y += 150;
     }
     for(;;) {
         for(int i=0; i<100; i++) {
-            gop_draw_rect(100, proc_y, 50+i, 50, arg);
+            gop_draw_rect(proc_x, proc_y, 50+i, 50, arg);
         }
 
-        gop_draw_rect(100, proc_y, 450, 50, GOP_BLK);
+        gop_draw_rect(proc_x, proc_y, 170, 50, GOP_BLK);
     }
 }
 

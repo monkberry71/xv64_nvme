@@ -23,7 +23,7 @@ KERNEL_LDFLAGS = -m elf_x86_64 \
 
 HOST_CFLAGS = -std=c11 -Wall -Wextra -Iinclude
 
-.PHONY: run clean debug format_usb format_esp build_user
+.PHONY: run reset-fs check-fs clean debug format_usb format_esp build_user
 
 KERNEL_C_SRCS = $(shell find kernel -name '*.c')
 KERNEL_ASM_SRCS = $(shell find kernel -name '*.asm')
@@ -93,6 +93,13 @@ build/fs.img: build/tools/mkfs build_user
 	@mkdir -p build
 	cd build && ./tools/mkfs
 
+reset-fs: build/tools/mkfs build_user
+	@mkdir -p build
+	cd build && ./tools/mkfs
+
+check-fs:
+	@test -f build/fs.img
+
 #PHONY
 format_usb: build/usb.img format_esp
 	parted -s $< mklabel gpt
@@ -105,7 +112,7 @@ OVMF = /usr/share/ovmf/OVMF.fd
 SMP ?= 4
 
 #PHONY
-run: format_usb build/fs.img
+run: format_usb check-fs
 	qemu-system-x86_64 \
 	-machine q35 \
 	-drive if=pflash,format=raw,readonly=on,file=$(OVMF) \

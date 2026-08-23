@@ -186,6 +186,35 @@ void free_vm(pte_t *pml4, uint64_t sz) {
     free_entry(pml4, 0);
 }
 
+pte_t* copy_uvm(pte_t *pml4, uint64_t sz) {
+    pte_t *new_pml4 = setup_uvm();
+    if(!new_pml4) return 0;
+
+    uint64_t addr;
+    for(addr = PGSIZE_4KB; addr < sz; addr += PGSIZE_4KB) {
+        pte_t *pte = walk_pml4(pml4, (void*) addr, 0, 0);
+        if(!pte) 
+            panic("copy_uvm: pte should exist");
+        if(!(*pte & PTE_P))
+            panic("copy_uvm: page not present");
+        
+        uint64_t pa = PTE_ADDR(*pte);
+        uint64_t flags = PTE_FLAGS(*pte);
+
+        void* mem = kalloc();
+        if(!mem) goto bad;
+        memcpy(mem, P2V_DIR(pa), PGSIZE_4KB);
+        if(map_pages(new_pml4, (void*) addr, PGSIZE_4KB, V2P_DIR(mem), flags) < 0) {
+            kfree(mem);
+            goto bad;
+        }
+    }
+    return new_pml4;
+    bad:
+        free_vm(new_pml4, addr);
+        return 0;
+}
+
 // only for initcode
 void init_code_uvm(pte_t *pml4, uint8_t *init_code, uint64_t sz) {
     if(sz >= PGSIZE_4KB)

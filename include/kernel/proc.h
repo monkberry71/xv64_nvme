@@ -40,3 +40,4 @@ void yield(void);
 void sleep(void* chan, struct spin_lock *lk);
 void wakeup(void* chan);
 int64_t exec(char *path, char **argv);
+int64_t fork(void);

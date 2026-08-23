@@ -323,6 +323,53 @@ void user_init(void) {
     release(&proc_table.lk);
 }
 
+int64_t fork(void) {
+    struct proc *new_p = alloc_kthread();
+    if(!new_p) return -1;
+    struct proc *cur_p = myproc();
+
+    // Set stacks for new_p
+    uint64_t sp = new_p->kstack + KERNEL_STACK_SIZE;
+    sp -= sizeof(struct trap_frame);
+    new_p->tf = (void*) sp;
+
+    sp -= 8;
+    *(uint64_t *) sp = (uint64_t) syscall_ret;
+    
+    sp -= sizeof(struct context);
+    new_p->context = (void *) sp;
+
+    memset(new_p->context, 0, sizeof(struct context));
+    new_p->context->rip = (uint64_t) first_ret;
+
+    new_p->pml4 = copy_uvm(cur_p->pml4, cur_p->sz);
+    if(!new_p->pml4) {
+        kfree((void*) new_p->kstack);
+        new_p->kstack = 0;
+        new_p->state= UNUSED;
+        return -1;
+    }
+
+    new_p->sz = cur_p->sz;
+    new_p->parent = cur_p;
+    *(new_p->tf) = *(cur_p->tf);
+    new_p->tf->gprs.rax = 0;
+
+    for(int i=0; i<N_OFILES; i++) {
+        if(cur_p->ofile[i])
+            new_p->ofile[i] = file_dup(cur_p->ofile[i]);
+    }
+    new_p->cwd = idup(cur_p->cwd);
+    strncpy(new_p->name, cur_p->name, sizeof(cur_p->name));
+
+    uint64_t pid = new_p->pid;
+    acquire(&proc_table.lk);
+    new_p->state = RUNNABLE;
+    release(&proc_table.lk);
+    
+    return pid;
+}
+
 void proc_draw(uint64_t arg) {
     uint64_t proc_y;
     switch(arg) {

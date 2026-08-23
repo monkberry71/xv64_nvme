@@ -20,7 +20,8 @@ static void enter_user_from_tf(struct trap_frame *tf) {
 int64_t exec(char *path, char **argv) {
     struct inode *ip = namei(path);
     if(!ip) {
-        panic("exec: failed to find inode");
+        serial_printf("exec: failed to find inode\n");
+        return -1;
     }
 
     ilock(ip);

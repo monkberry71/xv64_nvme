@@ -24,7 +24,7 @@ extern int64_t sys_read(void);
 // extern int64_t sys_sbrk(void);
 // extern int64_t sys_sleep(void);
 // extern int64_t sys_unlink(void);
-// extern int64_t sys_wait(void);
+extern int64_t sys_wait(void);
 extern int64_t sys_write(void);
 // extern int64_t sys_uptime(void);
 extern int64_t sys_draw(void);
@@ -33,7 +33,7 @@ typedef int64_t (*syscall_func) (void);
 static syscall_func syscalls[] = {
     [SYS_fork]    =sys_fork,
     // [SYS_exit]    =sys_exit,
-    // [SYS_wait]    =sys_wait,
+    [SYS_wait]    =sys_wait,
     // [SYS_pipe]    =sys_pipe,
     [SYS_read]    =sys_read,
     // [SYS_kill]    =sys_kill,

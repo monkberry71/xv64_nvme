@@ -370,6 +370,45 @@ int64_t fork(void) {
     return pid;
 }
 
+int64_t wait(void) {
+    struct proc *cur_p = myproc();
+
+    acquire(&proc_table.lk);
+
+    uint64_t pid;
+    for(;;) {
+        int have_kids = 0;
+        for(int i=0; i<N_PROCS; i++) {
+            struct proc *p = &proc_table.procs[i];
+            if(p->parent != cur_p) continue;
+            have_kids = 1;
+            if(p->state == ZOMBIE) {
+                pid = p->pid;
+                kfree((void*)p->kstack);
+                p->kstack = 0;
+
+                free_vm(p->pml4, p->sz);
+                p->pid = 0;
+                p->parent = 0;
+                p->name[0] = 0;
+                p->killed = 0;
+                p->state = UNUSED;
+
+                release(&proc_table.lk);
+                return pid;
+            }
+        }
+
+        if(!have_kids || cur_p->killed) {
+            // no kids or dead
+            release(&proc_table.lk);
+            return -1;
+        }
+
+        sleep(cur_p, &proc_table.lk);
+    }
+}
+
 void proc_draw(uint64_t arg) {
     uint64_t proc_y;
     switch(arg) {

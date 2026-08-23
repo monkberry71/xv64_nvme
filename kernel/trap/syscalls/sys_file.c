@@ -171,10 +171,3 @@ int64_t sys_open(void) {
     return fd;
 }
 
-int64_t exec(char *, char **);
-int64_t sys_exec(void) {
-    char *path = (void *) myproc()->tf->gprs.rdi;
-    char **argv = (void *) myproc()->tf->gprs.rsi;
-
-    return exec(path, argv);
-}

@@ -21,3 +21,11 @@ int64_t sys_sbrk(void) {
     if(grow_proc(n) < 0) return -1;
     return addr;
 }
+
+int64_t exec(char *, char **);
+int64_t sys_exec(void) {
+    char *path = (void *) myproc()->tf->gprs.rdi;
+    char **argv = (void *) myproc()->tf->gprs.rsi;
+
+    return exec(path, argv);
+}

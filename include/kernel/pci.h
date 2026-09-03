@@ -33,3 +33,4 @@ uint32_t pci_func_read32(struct pci_func *f, uint16_t offset);
 void pci_func_write32(struct pci_func *f, uint16_t offset, uint32_t val);
 void pci_enable_device(struct pci_func *f);
 int pci_find_class(uint8_t class_code, uint8_t subclass, uint8_t prog_if, struct pci_func *out);
+int pci_find_cap(struct pci_func *f, uint8_t id_to_find);

@@ -9,6 +9,7 @@
 #include <kernel/mmu.h>
 #include <kernel/mem_layout.h>
 #include <kernel/bio.h>
+#include <kernel/msix.h>
 
 // https://wiki.osdev.org/NVMe
 
@@ -150,7 +151,7 @@ static void nvme_make_qp_io(struct nvme_controller *c, struct nvme_queue_pair *q
     cmd.opcode = NVME_ADMIN_OPCODE_CREATE_IO_CQ;
     cmd.prp1 = qp->cq.p_addr;
     cmd.cdw10[0] = qp->qp_id | ((qp->cq.size - 1) << 16);
-    cmd.cdw10[1] = BIT(0);
+    cmd.cdw10[1] = BIT(0) | BIT(1) | (0 << 16);
 
     if(nvme_admin_submit(c, &cmd, 0) < 0) {
         panic("nvme_make_qp_io: create cq failed");
@@ -493,6 +494,9 @@ void nvme_init(void) {
     nvme_cache_cap(&first_nvme);
     
     nvme_disable(&first_nvme);
+
+    // Set MSI-X
+    add_msix_entry(&first_nvme.pci_func, 0, mycpu()->lapic_id);
 
     // Making an Admin Queue Pair
     init_nvme_queue_pair(&first_nvme.admin_queue, NVME_ADMIN_Q_DEPTH);

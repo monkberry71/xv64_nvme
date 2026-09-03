@@ -55,5 +55,8 @@ struct gate_desc {
 #define IRQ_ERROR       19
 #define IRQ_SPURIOUS    31
 
+// MSI-X
+#define T_NVME 80
+
 void tv_init(void);
 void idt_init(void);

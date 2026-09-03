@@ -164,6 +164,28 @@ int pci_find_class(uint8_t class_code, uint8_t subclass, uint8_t prog_if, struct
     return -1;
 }
 
+int pci_find_cap(struct pci_func *f, uint8_t id_to_find) {
+    uint32_t cmd_status = pci_func_read32(f, 0x04);
+    uint16_t status = cmd_status >> 16;
+
+    if((status & BIT(4)) == 0) return -1;
+
+    uint8_t cap = pci_func_read32(f, 0x34) & 0xFF;
+    cap &= ~0x3;
+
+    while(cap) {
+        uint32_t hdr = pci_func_read32(f, cap);
+
+        uint8_t id = hdr & 0xFF;
+        if(id == id_to_find) return cap;
+
+        uint8_t next = (hdr >> 8) & 0xFF;
+        cap = next & ~0x3;
+    }
+
+    return -1;
+}
+
 // Just ECAM enumerating and init mcfg
 void pci_init(void) {
     mcfg = xsdt_find_table("MCFG");

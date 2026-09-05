@@ -112,3 +112,4 @@ struct nvme_lbaf {
 
 void nvme_init(void);
 void nvme_rw(struct buf *b);
+void nvme_intr(void);

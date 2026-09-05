@@ -10,6 +10,7 @@
 #include <kernel/mem_layout.h>
 #include <kernel/bio.h>
 #include <kernel/msix.h>
+#include <kernel/proc.h>
 
 // https://wiki.osdev.org/NVMe
 
@@ -385,8 +386,9 @@ int nvme_req_alloc(struct nvme_controller *c, struct buf *b) {
     return -1;
 }
 
+// Caller must acquire the lock
 void nvme_req_reap_cpl(struct nvme_controller *c, struct nvme_cq_entry *cpl) {
-    acquire(&c->req_lk);
+    // acquire(&c->req_lk);
 
     struct nvme_block_req *r = &c->reqs[cpl->cmd_id];
     if(!r->used) {
@@ -402,7 +404,7 @@ void nvme_req_reap_cpl(struct nvme_controller *c, struct nvme_cq_entry *cpl) {
 
     r->done = 1;
     
-    release(&c->req_lk);
+    // release(&c->req_lk);
 }
 
 void nvme_req_free(struct nvme_controller *c, int req_id) {
@@ -452,16 +454,36 @@ void nvme_rw(struct buf *b) {
         panic("nvme_rw: enqueue failed");
     
     struct nvme_cq_entry cpl;
+    
+    acquire(&first_nvme.req_lk);
     while(!c->reqs[cmd.cmd_id].done) {
-        if(nvme_cq_try_dequeue(&c->io_queue, &cpl)) {
-            nvme_req_reap_cpl(c, &cpl);
-        }
+        // if(nvme_cq_try_dequeue(&c->io_queue, &cpl)) {
+        //     nvme_req_reap_cpl(c, &cpl);
+        // }
+        // serial_printf("nvme sleep, cmd_id = %d\n", cmd.cmd_id);
+        sleep(&c->reqs[cmd.cmd_id], &first_nvme.req_lk);
     }
+    serial_printf("nvme wake\n");
 
     if(c->reqs[cmd.cmd_id].status)
         panic("nvme_rw: cmd failed"); 
+    release(&first_nvme.req_lk);
 
     nvme_req_free(c, cmd.cmd_id);
+}
+
+void nvme_intr(void) {
+    acquire(&first_nvme.req_lk);
+
+    struct nvme_cq_entry cpl;
+    
+    while(nvme_cq_try_dequeue(&first_nvme.io_queue, &cpl)) {
+        nvme_req_reap_cpl(&first_nvme, &cpl);
+        // serial_printf("nvme wakeup cmd_id = %d\n", cpl.cmd_id);
+        wakeup(&first_nvme.reqs[cpl.cmd_id]);
+    }
+
+    release(&first_nvme.req_lk);
 }
 
 void nvme_init(void) {
@@ -494,52 +516,39 @@ void nvme_init(void) {
     nvme_cache_cap(&first_nvme);
     
     nvme_disable(&first_nvme);
+    // Req table init
+    init_lock(&first_nvme.req_lk, "first_nvme req table lock");
 
     // Set MSI-X
     add_msix_entry(&first_nvme.pci_func, 0, mycpu()->lapic_id);
-
     // Making an Admin Queue Pair
     init_nvme_queue_pair(&first_nvme.admin_queue, NVME_ADMIN_Q_DEPTH);
     nvme_make_qp_admin(&first_nvme, &first_nvme.admin_queue);
-
+    
     nvme_enable(&first_nvme);
-
+    
     serial_printf("NVME after enable CC=%x CSTS=%x AQA=%x ASQ=%p ACQ=%p\n",
-            nvme_read32(&first_nvme, NVME_REG_CC),
-            nvme_read32(&first_nvme, NVME_REG_CSTS),
-            nvme_read32(&first_nvme, NVME_REG_AQA),
-            nvme_read64(&first_nvme, NVME_REG_ASQ),
-            nvme_read64(&first_nvme, NVME_REG_ACQ));
-
-
-    // Send first identify controller command
+        nvme_read32(&first_nvme, NVME_REG_CC),
+        nvme_read32(&first_nvme, NVME_REG_CSTS),
+        nvme_read32(&first_nvme, NVME_REG_AQA),
+        nvme_read64(&first_nvme, NVME_REG_ASQ),
+        nvme_read64(&first_nvme, NVME_REG_ACQ));
+        
+        
+        // Send first identify controller command
     nvme_identify_controller(&first_nvme);
-
+    
     // Let's pray that there be a namespace marked 1...
     nvme_identify_namespace(&first_nvme, 1, &first_nvme.ns1);
-
+    
     // Make a IO queue pair 1    
     init_nvme_queue_pair(&first_nvme.io_queue, NVME_IO_Q_DEPTH);
     nvme_make_qp_io(&first_nvme, &first_nvme.io_queue, 1);
-
+    
     void* test_page = kalloc();
     if(!test_page) {
         panic("nvme_init: test_page alloc failed");
     }
-    
-    // nvme_read_block(&first_nvme, 0, test_page);
-    // uint8_t *p = test_page;
-    // serial_printf("NVME read bytes: %s\n", p);
-
-    // memcpy(test_page, "REWRITE", 8);
-
-    // nvme_write_block(&first_nvme, 0, test_page);
-    // nvme_read_block(&first_nvme, 0, test_page);
-    // serial_printf("NVME read bytes: %s\n", p);
-
-    // Req table init
-    init_lock(&first_nvme.req_lk, "first_nvme req table lock");
-
     log_inits("nvme_init");
 }
 

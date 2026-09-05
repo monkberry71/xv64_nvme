@@ -6,6 +6,8 @@
 #include <kernel/debug.h>
 #include <kernel/lapic.h>
 #include <kernel/proc.h>
+#include <kernel/kbd.h>
+#include <kernel/nvme.h>
 
 struct gate_desc idt[256];
 extern uint64_t vectors[256];
@@ -64,6 +66,7 @@ void intr(struct trap_frame *tf) {
 
     if(tf->vector_no == T_NVME) {
         serial_printf("NVME INTR!!!\n");
+        nvme_intr();
         lapic_eoi();
         return;
     }

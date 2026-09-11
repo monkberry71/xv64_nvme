@@ -53,7 +53,7 @@ void pci_enable_device(struct pci_func *f) {
 
     cmd |= BIT(1); // Memoery Space
     cmd |= BIT(2); // Bus Master 
-    cmd &= ~BIT(10); // Clear the intr disable bit
+    // cmd &= ~BIT(10); // Clear the intr disable bit
 
     reg = ((uint32_t) status << 16) | cmd;
     pci_func_write32(f, 0x04, reg);

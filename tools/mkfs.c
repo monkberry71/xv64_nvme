@@ -224,6 +224,7 @@ int main(void) {
     add_file(rooti, "echo");
     add_file(rooti, "mkdir");
     add_file(rooti, "ls");
+    add_file(rooti, "stress_fs");
 
     save_img();
 }

@@ -23,6 +23,7 @@ void process_init(void) {
 }
 
 uint64_t next_pid = 1;
+extern pte_t *dm_kpml4;
 
 struct proc* alloc_kthread(void) {
     acquire(&proc_table.lk);
@@ -233,11 +234,8 @@ void make_kthread(kthread_t kthread_func, uint64_t kthread_arg) {
         panic("make_kthread: alloc_kthread failed");
     }
     
-    extern pte_t *kpml4;
     // kpml4 is a kernel mapped address, we need to change it to 
     // a direct mapped address.
-    uint64_t p_kpml4 = V2P_KERN(kpml4);
-    pte_t *dm_kpml4 = P2V_DIR(p_kpml4);
     p->pml4 = dm_kpml4;
 
     uint64_t sp = p->kstack + KERNEL_STACK_SIZE;
@@ -270,10 +268,16 @@ void make_kthread(kthread_t kthread_func, uint64_t kthread_arg) {
     release(&proc_table.lk);
 }
 
+char* exec_args[1] = {0};
+void user_init_kthread(uint64_t kthread_arg) {
+    if(exec("/init", exec_args) < 0)
+        panic("user_init_kthread: exec failed");
+    return; // to syscall_ret
+}
+
 static struct proc *init_proc;
 void syscall_ret(void);
 void user_init(void) {
-    extern char _binary_build_user_init_code_start[], _binary_build_user_init_code_size[];
     struct proc *p = alloc_kthread();
 
     if(!p) 
@@ -283,37 +287,34 @@ void user_init(void) {
         panic("user_init: init process pid is not 1");
     
     init_proc = p;
-    p->pml4 = setup_uvm();
+    p->pml4 = setup_uvm(); // It is a dummy for free_vm to free. exec calls free_vm
     if(!p->pml4)
         panic("user_init: setup_uvm failed");
-    init_code_uvm(p->pml4, _binary_build_user_init_code_start, (uint64_t) _binary_build_user_init_code_size);
-    p->sz = PGSIZE_4KB;
 
+    // Remake a new stack
     uint64_t sp = p->kstack + KERNEL_STACK_SIZE;
 
     // We want to make a tf to sysretq
     // We wish him go user mode
+    // exec will fill up the tf
     sp -= sizeof(struct trap_frame);
     p->tf = (void*) sp;
+    memset(p->tf, 0, sizeof(struct trap_frame));
 
     sp -= 8;
     *(uint64_t *) sp = (uint64_t) syscall_ret;
 
-    sp -= sizeof(struct context);
-    p->context = (void*) sp;
+    sp -= 8;
+    *(uint64_t *) sp = (uint64_t) user_init_kthread;
 
     // st -->
-    // ctxt -- sys_ret -- tf -- btm
-
+    sp -= sizeof(struct context);
+    p->context = (void*) sp;
     memset(p->context, 0, sizeof(struct context));
     p->context->rip = (uint64_t) first_ret;
+    // ctxt(first_ret) -- user_init_kthread -- sys_ret -- tf -- btm
     
-    // sysretq doesnt care about not-gprs, except rsp
-    memset(p->tf, 0, sizeof(struct trap_frame));
-    p->tf->rsp = PGSIZE_4KB; // init_code rsp is 4096
-    p->tf->gprs.r11 = RFLAGS_IF;
-    p->tf->gprs.rcx = 0; // init_code rip must be zero
-    strncpy(p->name, "init_code", 10);
+    // exec just follows the original cwd.
     p->cwd = namei("/");
     if(!p->cwd) 
         panic("user_init: root inode cannot be found");

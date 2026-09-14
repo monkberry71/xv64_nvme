@@ -18,10 +18,12 @@
 // static pte_t kpml4[512];
 // This pml4 is for scheduler process or general kthreads
 pte_t *kpml4 = 0;
+pte_t *dm_kpml4 = 0;
 
 // Alloc the whole pml4 and set cr3 as the pml4
 void kvm_alloc(void) {
     kpml4 = setup_kvm();
+    dm_kpml4 = P2V_DIR(V2P_KERN(kpml4));
     switch_kvm();
 }
 

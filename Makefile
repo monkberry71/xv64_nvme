@@ -15,7 +15,8 @@ KERNEL_CFLAGS = -m64 \
 -mno-80387 \
 -Iinclude \
 -mgeneral-regs-only \
--mcmodel=kernel
+-mcmodel=kernel \
+-g
 
 KERNEL_LDFLAGS = -m elf_x86_64 \
 -nostdlib \
@@ -23,7 +24,7 @@ KERNEL_LDFLAGS = -m elf_x86_64 \
 
 HOST_CFLAGS = -std=c11 -Wall -Wextra -Iinclude
 
-.PHONY: run reset-fs check-fs clean debug format_usb format_esp build_user
+.PHONY: run reset_fs check_fs clean debug format_usb format_esp build_user
 
 KERNEL_C_SRCS = $(shell find kernel -name '*.c')
 KERNEL_ASM_SRCS = $(shell find kernel -name '*.asm')
@@ -44,7 +45,6 @@ build/kernel/%.o: kernel/%.c
 
 build/kernel.elf: $(KERNEL_OBJS) build_user
 	$(LD) $(KERNEL_LDFLAGS) $(KERNEL_OBJS) \
-	-b binary build/user/init_code \
 	--oformat elf64-x86-64 \
 	-o $@
 
@@ -93,11 +93,11 @@ build/fs.img: build/tools/mkfs build_user
 	@mkdir -p build
 	cd build && ./tools/mkfs
 
-reset-fs: build/tools/mkfs build_user
+reset_fs: build/tools/mkfs build_user
 	@mkdir -p build
 	cd build && ./tools/mkfs
 
-check-fs:
+check_fs:
 	@test -f build/fs.img
 
 #PHONY
@@ -112,7 +112,7 @@ OVMF = /usr/share/ovmf/OVMF.fd
 SMP ?= 4
 
 #PHONY
-run: format_usb check-fs
+run: format_usb check_fs
 	qemu-system-x86_64 \
 	-machine q35 \
 	-drive if=pflash,format=raw,readonly=on,file=$(OVMF) \
@@ -127,19 +127,33 @@ run: format_usb check-fs
 	-monitor vc \
 
 #PHONY
-debug: format_usb
+debug: format_usb check_fs
 	qemu-system-x86_64 \
+	-machine q35 \
 	-drive if=pflash,format=raw,readonly=on,file=$(OVMF) \
 	-drive format=raw,file=build/usb.img \
-	-m 128M \
-	-smp $(SMP) \
+	-drive if=none,id=nvme0,format=raw,file=build/fs.img \
+	-device nvme,drive=nvme0,serial=deadbeef,logical_block_size=4096,physical_block_size=4096 \
+	-m 512M \
+	-smp 1 \
 	-vga std \
 	-serial stdio \
-	-monitor vc \
-	-s -S \
-	-no-reboot \
 	-d int,cpu_reset -D ./misc/qemu.log \
-	-accel tcg
+	-monitor vc \
+	-s -S
+# debug: format_usb
+# 	qemu-system-x86_64 \
+# 	-drive if=pflash,format=raw,readonly=on,file=$(OVMF) \
+# 	-drive format=raw,file=build/usb.img \
+# 	-m 128M \
+# 	-smp $(SMP) \
+# 	-vga std \
+# 	-serial stdio \
+# 	-monitor vc \
+# 	-s -S \
+# 	-no-reboot \
+# 	-d int,cpu_reset -D ./misc/qemu.log \
+# 	-accel tcg
 
 #PHONY
 clean:

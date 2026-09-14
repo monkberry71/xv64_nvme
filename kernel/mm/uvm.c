@@ -216,14 +216,14 @@ pte_t* copy_uvm(pte_t *pml4, uint64_t sz) {
 }
 
 // only for initcode
-void init_code_uvm(pte_t *pml4, uint8_t *init_code, uint64_t sz) {
-    if(sz >= PGSIZE_4KB)
-        panic("init_uvm: initcode is too big");
+// void init_code_uvm(pte_t *pml4, uint8_t *init_code, uint64_t sz) {
+//     if(sz >= PGSIZE_4KB)
+//         panic("init_uvm: initcode is too big");
     
-    void *mem = kalloc();
-    if(!mem)
-        panic("init_uvm: kalloc failed");
-    memset(mem, 0, PGSIZE_4KB);
-    map_pages(pml4, 0, PGSIZE_4KB, V2P_DIR(mem), PTE_W | PTE_U);
-    memcpy(mem, init_code, sz);
-}
+//     void *mem = kalloc();
+//     if(!mem)
+//         panic("init_uvm: kalloc failed");
+//     memset(mem, 0, PGSIZE_4KB);
+//     map_pages(pml4, 0, PGSIZE_4KB, V2P_DIR(mem), PTE_W | PTE_U);
+//     memcpy(mem, init_code, sz);
+// }

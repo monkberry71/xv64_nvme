@@ -4,44 +4,41 @@
 #include <kernel/debug.h>
 #include <kernel/uart.h>
 #include <kernel/mem_layout.h>
+#include <kernel/kvm.h>
 
 struct mcfg *mcfg;
+static struct pci_ecam_window windows[16] = {0};
+static int n_windows = 0;
 
 // In the ECAM window to which the MCFG entry points,
 // read the certain register of the config space
-static uint32_t pci_read32_ecam(struct mcfg_entry *entry, uint8_t bus, uint8_t dev, uint8_t func, uint16_t offset) {
-    uint64_t pa = 
-    entry->base_address +
-    ((uint64_t)(bus - entry->start_bus) << 20) +
-    ((uint64_t)(dev) << 15) +
-    ((uint64_t)(func) << 12) + 
-    offset;
+static uint32_t pci_read32_ecam(struct pci_ecam_window *win, uint8_t bus, uint8_t dev, uint8_t func, uint16_t offset) {
+    uint64_t bus_offset = bus - win->start_bus;
+    uint64_t dev_offset = dev;
+    uint64_t func_offset = func;
+    uint64_t addr = ((uint64_t) win->va + (bus_offset << 20) + (dev_offset << 15) + (func_offset << 12)) + offset;
 
-    volatile uint32_t *p = P2V_DIR(pa);
+    volatile uint32_t *p = (void*) addr;
     return *p;
 }
 
-static void pci_write32_ecam(struct mcfg_entry *entry, uint8_t bus, uint8_t dev, uint8_t func, uint16_t offset, uint32_t val) {
-    uint64_t pa = 
-    entry->base_address +
-    ((uint64_t)(bus - entry->start_bus) << 20) +
-    ((uint64_t)(dev) << 15) +
-    ((uint64_t)(func) << 12) + 
-    offset;
+static void pci_write32_ecam(struct pci_ecam_window *win, uint8_t bus, uint8_t dev, uint8_t func, uint16_t offset, uint32_t val) {
+    uint64_t bus_offset = bus - win->start_bus;
+    uint64_t dev_offset = dev;
+    uint64_t func_offset = func;
+    uint64_t addr = ((uint64_t) win->va + (bus_offset << 20) + (dev_offset << 15) + (func_offset << 12)) + offset;
 
-    volatile uint32_t *p = P2V_DIR(pa);
+    volatile uint32_t *p = (void*) addr;
     *p = val;
 }
 
 // public helpers that operates on struct pci_func
-uint32_t
-pci_func_read32(struct pci_func *f, uint16_t offset) {
-    return pci_read32_ecam(f->mcfg_entry, f->bus, f->dev, f->func, offset);
+uint32_t pci_func_read32(struct pci_func *f, uint16_t offset) {
+    return pci_read32_ecam(f->window, f->bus, f->dev, f->func, offset);
 }
 
-void
-pci_func_write32(struct pci_func *f, uint16_t offset, uint32_t val) {
-    pci_write32_ecam(f->mcfg_entry, f->bus, f->dev, f->func, offset, val);
+void pci_func_write32(struct pci_func *f, uint16_t offset, uint32_t val) {
+    pci_write32_ecam(f->window, f->bus, f->dev, f->func, offset, val);
 }
 
 // Setup basic
@@ -53,7 +50,7 @@ void pci_enable_device(struct pci_func *f) {
 
     cmd |= BIT(1); // Memoery Space
     cmd |= BIT(2); // Bus Master 
-    // cmd &= ~BIT(10); // Clear the intr disable bit
+    cmd |= BIT(10); // Disable the legacy intr
 
     reg = ((uint32_t) status << 16) | cmd;
     pci_func_write32(f, 0x04, reg);
@@ -62,13 +59,13 @@ void pci_enable_device(struct pci_func *f) {
 // Set the bar entries
 static void pci_fill_bars(struct pci_func *f) {
     for(int i=0; i<6; i++) {
-        uint32_t raw = pci_read32_ecam(f->mcfg_entry, f->bus, f->dev, f->func, 0x10 + i * 4);
+        uint32_t raw = pci_read32_ecam(f->window, f->bus, f->dev, f->func, 0x10 + i * 4);
 
         // 0 -->
         // Memory Bar? | Memory Bar Type | Prefetchable | Base_addr
         // 1 | 2 | 1 | ...
         f->bars[i].base = 0;
-        f->bars[i].size = 0;
+        f->bars[i].size = 0x4000; // Ok this is miserable but NVMe has at least 0x4000 sized bar0...
         f->bars[i].is_io = raw & 1;
         f->bars[i].is_64 = 0;
         f->bars[i].prefetchable = 0;
@@ -84,7 +81,7 @@ static void pci_fill_bars(struct pci_func *f) {
 
             if(type == 0x2) {
                 // 10 means 64bit
-                uint32_t high = pci_read32_ecam(f->mcfg_entry, f->bus, f->dev, f->func, 0x10 + (i+1) * 4);
+                uint32_t high = pci_read32_ecam(f->window, f->bus, f->dev, f->func, 0x10 + (i+1) * 4);
                 f->bars[i].base = ((uint64_t) high << 32) | (raw & ~0xFULL);
                 f->bars[i].is_64 = 1;
                 i++;
@@ -97,58 +94,49 @@ static void pci_fill_bars(struct pci_func *f) {
 }
 
 int pci_find_class(uint8_t class_code, uint8_t subclass, uint8_t prog_if, struct pci_func *out) {
-    if(!mcfg) 
-        panic("pci_find_class: can't find MCFG table");
+    for(int i=0; i<n_windows; i++) {
+        struct pci_ecam_window *w = &windows[i];
 
-    struct mcfg_it it;
-    mcfg_it_init(&it, mcfg);
-
-    for(; !it.end; mcfg_it_next(&it)) {
-        struct mcfg_entry *e = it.curr;
-
-        for(uint16_t bus = e->start_bus; bus <= e->end_bus; bus++) {
-            for(uint8_t dev = 0; dev < 32; dev++) {
-                // Check the func0's config space registers first
-                uint32_t id0 = pci_read32_ecam(e, bus, dev, 0, 0x00);
+        for(int bus = w->start_bus; bus <= w->end_bus; bus++) {
+            for(int dev = 0; dev < 32; dev++) {
+                uint32_t id0 = pci_read32_ecam(w, bus, dev, 0, 0);
                 uint16_t vendor0 = id0 & 0xFFFF;
 
-                if(vendor0 == 0xFFFF) continue;
+                // If Function[0] is FFFF(empty), the whole device is actually empty
+                if(vendor0 == 0xFFFF) continue; 
 
-                uint32_t hdr0 = pci_read32_ecam(e, bus, dev, 0, 0x0C);
+                uint32_t hdr0 = pci_read32_ecam(w, bus, dev, 0, 0xC);
                 uint8_t header_type0 = (hdr0 >> 16) & 0xFF;
                 uint8_t n_func = (header_type0 & 0x80) ? 8 : 1;
 
-                for(uint8_t func = 0; func < n_func; func++) {
-                    uint32_t id = pci_read32_ecam(e, bus, dev, func, 0x00);
+                for(uint8_t f = 0; f < n_func; f++) {
+                    uint32_t id = pci_read32_ecam(w, bus, dev, f, 0);
                     uint16_t vendor = id & 0xFFFF;
 
                     if(vendor == 0xFFFF) continue;
 
                     uint16_t device = (id >> 16) & 0xFFFF;
-                    uint32_t class_reg = pci_read32_ecam(e, bus, dev, func, 0x08);
-                    // 0 --->
-                    // class_reg == revision | prog if | subcls | cls
-                    // Each one is 1 byte-long
+                    // class_reg == Rev | Prog IF | SubCls | Cls
+                    uint32_t class_reg = pci_read32_ecam(w, bus, dev, f, 0x8);
 
-                    uint8_t r_prog_if = (class_reg >> 8) & 0xFF;
-                    uint8_t r_sub_cls = (class_reg >> 16) & 0xFF;
-                    uint8_t r_cls = (class_reg >> 24) & 0xFF;
+                    uint8_t this_cls = (class_reg >> 24) & 0xFF;
+                    uint8_t this_subcls = (class_reg >> 16) & 0xFF;
+                    uint8_t this_prog_if = (class_reg >> 8) & 0xFF;
 
-                    if(r_cls == class_code && r_sub_cls == subclass && r_prog_if == prog_if) {
-                        // Found one
-                        uint32_t hdr = pci_read32_ecam(e, bus, dev, func, 0x0C);
-                        uint8_t header_type = (hdr >> 16) & 0xFF;
+                    if(this_cls == class_code && this_subcls == subclass && this_prog_if == prog_if) {
+                        // Found
+                        uint8_t header_type = pci_read32_ecam(w, bus, dev, f, 0xC) >> 16;
 
-                        out->mcfg_entry = e;
-                        out->segment = e->segment_group;
+                        out->window = w;
+                        out->segment = w->segment;
                         out->bus = bus;
                         out->dev = dev;
-                        out->func = func;
+                        out->func = f;
                         out->vendor_id = vendor;
                         out->device_id = device;
-                        out->class_code = r_cls;
-                        out->subclass = r_sub_cls;
-                        out->prog_if = r_prog_if;
+                        out->class_code = this_cls;
+                        out->subclass = this_subcls;
+                        out->prog_if = this_prog_if;
                         out->header_type = header_type;
 
                         pci_fill_bars(out);
@@ -156,11 +144,8 @@ int pci_find_class(uint8_t class_code, uint8_t subclass, uint8_t prog_if, struct
                     }
                 }
             }
-
         }
     }
-
-    // Not found
     return -1;
 }
 
@@ -186,7 +171,8 @@ int pci_find_cap(struct pci_func *f, uint8_t id_to_find) {
     return -1;
 }
 
-// Just ECAM enumerating and init mcfg
+
+// Fill the windows array
 void pci_init(void) {
     mcfg = xsdt_find_table("MCFG");
 
@@ -197,14 +183,29 @@ void pci_init(void) {
     struct mcfg_it it;
     mcfg_it_init(&it, mcfg);
 
-    for(; !it.end; mcfg_it_next(&it)) { // foreach mcfg
+    int num;
+    for(num = 0; !it.end; mcfg_it_next(&it)) { // foreach mcfg
+        if(num >= 16) 
+            panic("pci_init: there is more MCFG entries than 16");
+
+        uint64_t bus_count = it.curr->end_bus - it.curr->start_bus + 1;
+        uint64_t size = bus_count << 20; // 1MB per bus in ECAM
+
+        windows[num].pa = it.curr->base_address;
+        windows[num].va = io_remap(it.curr->base_address, size);
+        windows[num].segment = it.curr->segment_group;
+        windows[num].start_bus = it.curr->start_bus;
+        windows[num].end_bus = it.curr->end_bus;
+
         serial_printf("MCFG base=%p seg=%d bus=%d - %d\n",
-            it.curr->base_address,
-            it.curr->segment_group,
-            it.curr->start_bus,
-            it.curr->end_bus
+            windows[num].pa,
+            windows[num].segment,
+            windows[num].start_bus,
+            windows[num].end_bus
         );
+        num++;
     }
+    n_windows = num;
 
     log_inits("pci_init");
 }

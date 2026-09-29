@@ -2,6 +2,14 @@
 #include <stdint.h>
 #include <kernel/acpi.h>
 
+struct pci_ecam_window {
+    uint64_t pa;
+    volatile uint8_t *va;
+    uint16_t segment;
+    uint8_t start_bus;
+    uint8_t end_bus;
+};
+
 struct pci_bar {
     uint64_t base;
     uint64_t size;
@@ -11,7 +19,8 @@ struct pci_bar {
 };
 
 struct pci_func {
-    struct mcfg_entry *mcfg_entry;
+    struct pci_ecam_window *window;
+    void* base;
     uint16_t segment;
     uint8_t bus;
     uint8_t dev;
